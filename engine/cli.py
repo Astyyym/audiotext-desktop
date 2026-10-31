@@ -51,6 +51,43 @@ def _emit(obj: dict) -> None:
     sys.stdout.flush()
 
 
+def _discard_outputs(paths):
+    for path in paths:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+def _reserve_outputs(out_dir, stem, fmts):
+    """Reserve a fresh, shared stem without replacing any existing output."""
+    supported = ("txt", "srt", "md", "json")
+    requested = [fmt for fmt in supported if fmt in fmts]
+    if not requested:
+        return {}
+    number = 0
+    while True:
+        name = stem if number == 0 else f"{stem} ({number})"
+        # Keep existing output groups together, including formats not requested now.
+        if any(os.path.lexists(os.path.join(out_dir, name + "." + fmt)) for fmt in supported):
+            number += 1
+            continue
+        outputs = {fmt: os.path.join(out_dir, name + "." + fmt) for fmt in requested}
+        reserved = []
+        try:
+            for path in outputs.values():
+                # Exclusive creation also protects against another process racing us.
+                with open(path, "x", encoding="utf-8"):
+                    pass
+                reserved.append(path)
+            return outputs
+        except BaseException as exc:
+            _discard_outputs(reserved)
+            if not isinstance(exc, FileExistsError):
+                raise
+            number += 1
+
+
 def cmd_transcribe(args) -> int:
     model_dir = args.model or os.environ.get("ATD_MODEL")
     if not model_dir or not os.path.isdir(model_dir):
@@ -80,11 +117,12 @@ def cmd_transcribe(args) -> int:
     _emit({"type": "status", "stage": "transcribing", "duration": round(dur, 1),
            "model_load_s": round(load_s, 1)})
 
+    language = None if args.lang in ("", "auto") else args.lang
     segments = []
     chars = 0
     try:
         seg_iter, info = transcribe.iter_segments(
-            model, wav, language=args.lang, initial_prompt=prompt, beam_size=args.beam)
+            model, wav, language=language, initial_prompt=prompt, beam_size=args.beam)
         for seg in seg_iter:
             text = seg.text or ""
             if replace_map:
@@ -106,36 +144,29 @@ def cmd_transcribe(args) -> int:
             pass
 
     stem = os.path.splitext(os.path.basename(args.input))[0]
-    outputs = {}
-    if "txt" in fmts:
-        p = os.path.join(out_dir, stem + ".txt")
-        formats.write_txt(segments, p)
-        outputs["txt"] = p
-    if "srt" in fmts:
-        p = os.path.join(out_dir, stem + ".srt")
-        formats.write_srt(segments, p)
-        outputs["srt"] = p
-    if "md" in fmts:
-        p = os.path.join(out_dir, stem + ".md")
-        formats.write_md(segments, p)
-        outputs["md"] = p
-    if "json" in fmts:
-        p = os.path.join(out_dir, stem + ".json")
-        meta = {
-            "source": os.path.abspath(args.input),
-            "duration_sec": round(dur, 1),
-            "language": info.language,
-            "language_probability": round(getattr(info, "language_probability", 0.0), 3),
-            "model": os.path.basename(model_dir.rstrip("/\\")),
-            "device": device,
-            "compute_type": ctype,
-            "elapsed_sec": round(time.time() - t0, 1),
-            "speed_x": round(dur / max(time.time() - t0, 0.1), 1),
-            "chars": chars,
-            "segments": len(segments),
-        }
-        formats.write_json(segments, meta, p)
-        outputs["json"] = p
+    outputs = _reserve_outputs(out_dir, stem, fmts)
+    try:
+        for fmt, writer in (("txt", formats.write_txt), ("srt", formats.write_srt), ("md", formats.write_md)):
+            if fmt in outputs:
+                writer(segments, outputs[fmt])
+        if "json" in outputs:
+            meta = {
+                "source": os.path.abspath(args.input),
+                "duration_sec": round(dur, 1),
+                "language": info.language,
+                "language_probability": round(getattr(info, "language_probability", 0.0), 3),
+                "model": os.path.basename(model_dir.rstrip("/\\")),
+                "device": device,
+                "compute_type": ctype,
+                "elapsed_sec": round(time.time() - t0, 1),
+                "speed_x": round(dur / max(time.time() - t0, 0.1), 1),
+                "chars": chars,
+                "segments": len(segments),
+            }
+            formats.write_json(segments, meta, outputs["json"])
+    except BaseException:
+        _discard_outputs(outputs.values())
+        raise
 
     elapsed = time.time() - t0
     _emit({"type": "done", "outputs": outputs, "segments": len(segments), "chars": chars,

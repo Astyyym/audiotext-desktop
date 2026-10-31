@@ -58,8 +58,10 @@ Desktop.ini
 .env
 *.local
 config.local.*
+!app/config.local.example.json
 
-# 说明：docs/internal/ 为内部工作记录（plan/task-state/findings/progress），
-# 若仓库转为公开，发布前需一并排除该目录（见 AGENTS.md §4）。
+# 本地执行记录不公开；旧原型预览含私人演示资料，仅本地保留。
+docs/internal/
+designs/**/preview.png
 
 test.txt

@@ -1,0 +1,14 @@
+{
+  "python": "C:\\path\\to\\venv\\Scripts\\python.exe",
+  "model": "C:\\path\\to\\faster-whisper-small",
+  "device": "auto",
+  "formats": "txt,srt",
+  "lang": "zh",
+  "prompt": "以下是普通话对话。",
+  "beam": 5,
+  "outDir": "",
+  "cudaDir": "",
+  "extraPath": "",
+  "ffprobe": "ffprobe",
+  "modelName": ""
+}

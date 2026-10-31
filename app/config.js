@@ -59,7 +59,7 @@ function loadConfig() {
         engineRoot: resRoot,
         engineExe: path.join(resRoot, 'engine', 'engine.exe'),
         python: '',
-        model: path.join(resRoot, 'models', 'small'),
+        model: '',
         modelName: '',
         device: 'auto',
         formats: 'txt,srt',
@@ -124,7 +124,8 @@ function loadConfig() {
   } else if (!cfg.python || !fs.existsSync(cfg.python)) {
     cfg.warnings.push('未找到 Python 运行时或 engine.exe，请在 app/config.local.json 配置 python，或使用打包版。');
   }
-  if (!cfg.model || !fs.existsSync(cfg.model)) {
+  // 打包态不再内置模型：model 为空属正常（由应用内下载/导入模型包提供）。
+  if (cfg.model && !fs.existsSync(cfg.model)) {
     cfg.warnings.push('未找到模型目录，请在 app/config.local.json 配置 model。');
   }
   return cfg;

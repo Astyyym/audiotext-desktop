@@ -14,6 +14,8 @@ let CONFIG = null;
 let SETTINGS = { device: 'auto', modelKey: 'auto', outDir: '', lang: 'zh', formats: 'txt,srt', termsEnabled: false, historyDir: '', aiPrompt: DEFAULT_AI_PROMPT };
 let MODELS = [];
 let GPU = null;
+let CATALOG = [];        // 可下载模型清单（含是否已安装）
+let modelDl = {};        // key -> { status: 'downloading'|'error', pct, message }
 
 let staged = [];       // 待确认文件（在虚线框内）
 let stagedSeq = 0;
@@ -53,6 +55,7 @@ function extLabel(name) {
 }
 function friendlyError(msg) {
   const raw = String(msg || '');
+  if (/还没有可用模型|未找到可用模型/.test(raw)) return raw;
   if (/ffmpeg|CalledProcessError|returned non-zero|exit status/i.test(raw)) return '音频解码失败，请检查文件是否完整或换一种格式';
   if (/模型|model/i.test(raw)) return '模型加载失败，请检查设置里的模型';
   if (/ffprobe|not found|找不到/i.test(raw)) return '找不到音视频处理组件（ffmpeg）';
@@ -79,9 +82,15 @@ async function init() {
   await refreshSettings();
   wireUi();
   window.api.onEvent(onEngineEvent);
+  window.api.onModelEvent(onModelEvent);
   renderStaged();
   render();
   if ((CONFIG.warnings || []).length) setTimeout(() => toast(CONFIG.warnings[0]), 400);
+  else if (!MODELS.length) setTimeout(() => toast('还没有可用模型，请到「设置 → 模型」下载，或导入离线模型包'), 500);
+}
+
+async function refreshCatalog() {
+  try { CATALOG = await window.api.getModelCatalog(); } catch (e) { CATALOG = []; }
 }
 
 async function refreshSettings() {
@@ -89,6 +98,7 @@ async function refreshSettings() {
   SETTINGS = Object.assign({ aiPrompt: DEFAULT_AI_PROMPT }, r.settings || {});
   MODELS = r.models || [];
   GPU = r.gpu;
+  await refreshCatalog();
   fillHeaderSelects();
   updateHeadAndEnv();
 }
@@ -373,6 +383,56 @@ function renderSettings() {
   if (GPU === true) { g.textContent = 'GPU：可用（已检测到 NVIDIA 加速）'; g.className = 'gpu-line ok'; }
   else if (GPU === false) { g.textContent = 'GPU：不可用（将使用 CPU）'; g.className = 'gpu-line warn'; }
   else { g.textContent = 'GPU：未知'; g.className = 'gpu-line'; }
+  const md = $('#modelsDirHint');
+  if (md && CONFIG) md.textContent = CONFIG.modelRoot ? '目录：' + CONFIG.modelRoot : '';
+  renderModelList();
+}
+
+function renderModelList() {
+  const el = $('#modelList');
+  if (!el) return;
+  if (!CATALOG.length) { el.innerHTML = '<div class="hint">模型清单加载中…</div>'; return; }
+  el.innerHTML = CATALOG.map((m) => {
+    const dl = modelDl[m.key] || {};
+    const downloading = dl.status === 'downloading';
+    const pct = typeof dl.pct === 'number' ? dl.pct : 0;
+    let statusText = '未安装';
+    let cls = '';
+    if (m.installed) { statusText = '已安装' + (m.sizeMB ? '（约 ' + m.sizeMB + ' MB）' : ''); cls = 'ok'; }
+    else if (downloading) { statusText = '下载中 ' + pct.toFixed(1) + '%'; cls = 'run'; }
+    else if (dl.status === 'error') { statusText = '下载失败'; cls = 'err'; }
+    const action = m.installed ? ''
+      : (downloading
+        ? `<button class="btn btn-ghost btn-sm" data-mcancel="${m.key}">取消</button>`
+        : `<button class="btn btn-primary btn-sm" data-mdownload="${m.key}">下载</button>`);
+    const prog = (downloading || dl.status === 'error')
+      ? `<div class="mi-prog"><div class="bar"><i style="width:${downloading ? Math.max(1, Math.min(100, pct)) : 100}%"></i></div>${dl.status === 'error' ? '<span class="mi-err">' + esc(dl.message || '下载失败') + '</span>' : ''}</div>`
+      : '';
+    return `<div class="model-item" data-key="${esc(m.key)}">
+      <div class="mi-info">
+        <div class="mi-name">${esc(m.name)} <span class="mi-tag">${esc(m.key)}</span></div>
+        <div class="mi-desc">${esc(m.desc)} · 约 ${m.totalMB} MB</div>
+      </div>
+      <div class="mi-right"><span class="mi-status ${cls}">${esc(statusText)}</span>${action}</div>
+      ${prog}
+    </div>`;
+  }).join('');
+}
+
+function onModelEvent(ev) {
+  if (!ev || !ev.key) return;
+  const st = modelDl[ev.key] || (modelDl[ev.key] = {});
+  if (ev.type === 'start') { st.status = 'downloading'; st.pct = 0; st.message = ''; }
+  else if (ev.type === 'progress') { st.status = 'downloading'; st.pct = typeof ev.pct === 'number' ? ev.pct : st.pct || 0; }
+  else if (ev.type === 'done') {
+    st.status = 'idle'; st.pct = 100; st.message = '';
+    toast('模型下载完成：' + ev.key);
+    refreshSettings().then(() => { if (!$('#view-settings').hidden) renderSettings(); });
+  } else if (ev.type === 'error') {
+    if (/已取消/.test(ev.message || '')) { st.status = 'idle'; st.pct = 0; }
+    else { st.status = 'error'; st.message = ev.message || '下载失败'; toast('模型下载失败：' + (ev.message || '')); }
+  }
+  if (!$('#view-settings').hidden) renderModelList();
 }
 
 async function saveSettingsFromForm() {
@@ -525,6 +585,37 @@ function wireUi() {
 
   // 设置
   $('#saveSettings').addEventListener('click', saveSettingsFromForm);
+  $('#modelList').addEventListener('click', async (e) => {
+    const d = e.target.closest('[data-mdownload]');
+    const c = e.target.closest('[data-mcancel]');
+    if (d) {
+      const key = d.getAttribute('data-mdownload');
+      modelDl[key] = { status: 'downloading', pct: 0 };
+      renderModelList();
+      toast('开始下载：' + key);
+      try {
+        const result = await window.api.downloadModel(key);
+        if (result && result.ok === false) throw new Error(result.error || '无法开始下载');
+      } catch (err) {
+        modelDl[key] = { status: 'error', message: err.message || String(err) };
+        renderModelList();
+        toast('模型下载失败：' + (err.message || String(err)));
+      }
+    } else if (c) {
+      const key = c.getAttribute('data-mcancel');
+      await window.api.cancelModelDownload(key);
+      toast('已取消：' + key);
+    }
+  });
+  $('#refreshModels').addEventListener('click', async () => {
+    await refreshSettings();
+    renderSettings();
+    toast(MODELS.length ? '模型列表已刷新' : '还没有完整模型，请先下载或导入');
+  });
+  $('#openModelsDir').addEventListener('click', async () => {
+    const p = await window.api.openModelsDir();
+    toast('模型目录：' + p);
+  });
   $('#pickOutDir').addEventListener('click', async () => { const d = await window.api.pickDir(); if (d) $('#setOutDir').value = d; });
   $('#clearOutDir').addEventListener('click', () => { $('#setOutDir').value = ''; });
   $('#pickHistoryDir').addEventListener('click', async () => { const d = await window.api.pickDir(); if (d) $('#setHistoryDir').value = d; });

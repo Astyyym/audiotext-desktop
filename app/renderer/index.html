@@ -222,6 +222,17 @@
             </div>
 
             <div class="card">
+              <div class="card-title">模型下载（按需）</div>
+              <div class="hint" style="margin-bottom:10px;">模型较大，默认不随安装包提供。点「下载」会从魔搭（ModelScope）下载到本机 models 目录，支持断点续传；也可用离线模型包把 <b>small / medium / large-v3</b> 文件夹直接放到该目录（放好后点「刷新模型列表」即可识别）。</div>
+              <div class="model-list" id="modelList"></div>
+              <div class="inline-actions" style="margin-top:10px;">
+                <button class="btn btn-ghost btn-sm" id="openModelsDir">打开模型目录</button>
+                <button class="btn btn-ghost btn-sm" id="refreshModels">刷新模型列表</button>
+                <span class="hint" id="modelsDirHint"></span>
+              </div>
+            </div>
+
+            <div class="card">
               <div class="card-title">AI 总结提示词</div>
               <div class="hint" style="margin-bottom:8px;">把转写好的文字复制到网页 AI 的聊天框，再粘贴这段提示词，就能得到面试问题清单与回答要点，以及复盘建议。</div>
               <textarea class="input textarea" id="setPrompt" rows="7"></textarea>

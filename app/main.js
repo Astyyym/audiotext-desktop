@@ -3,10 +3,12 @@
  * AudioText Desktop · Electron 主进程
  * 职责：窗口、IPC、设置/历史/术语持久化、通过 stdio(JSON 行) 调用引擎并回传事件。
  */
-const { app, BrowserWindow, ipcMain, dialog, clipboard, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, clipboard, shell, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn, execFile } = require('child_process');
+const { Readable, Transform } = require('stream');
+const { pipeline } = require('stream/promises');
 
 const loadConfig = require('./config');
 
@@ -15,6 +17,45 @@ const MEDIA_EXT = [
   'wma', 'aiff', 'aif', 'mkv', 'webm', 'avi', 'flv', 'wmv', '3gp', 'ts', 'm2ts',
   'rmvb', 'mpeg', 'mpg', 'asf', 'dv',
 ];
+
+/**
+ * 可下载模型清单（默认从魔搭 ModelScope 拉取 faster-whisper 的 CTranslate2 版本）。
+ * 文件大小取自 ModelScope 仓库，用于进度百分比与完成校验。
+ * 不再随安装包内置，安装后在「设置 → 模型」按需下载，或导入离线模型包。
+ */
+const MODEL_CATALOG = [
+  {
+    key: 'small', name: 'Small', desc: '最快 · 适合 CPU', repo: 'Systran/faster-whisper-small',
+    files: [
+      { path: 'config.json', size: 2370 },
+      { path: 'tokenizer.json', size: 2203239 },
+      { path: 'vocabulary.txt', size: 459861 },
+      { path: 'model.bin', size: 483546902 },
+    ],
+  },
+  {
+    key: 'medium', name: 'Medium', desc: '均衡 · 比 small 准', repo: 'Systran/faster-whisper-medium',
+    files: [
+      { path: 'config.json', size: 2257 },
+      { path: 'tokenizer.json', size: 2203239 },
+      { path: 'vocabulary.txt', size: 459861 },
+      { path: 'model.bin', size: 1527906378 },
+    ],
+  },
+  {
+    key: 'large-v3', name: 'Large-V3', desc: '最准 · 建议配 NVIDIA GPU', repo: 'Systran/faster-whisper-large-v3',
+    files: [
+      { path: 'config.json', size: 2394 },
+      { path: 'tokenizer.json', size: 2480617 },
+      { path: 'vocabulary.json', size: 1068114 },
+      { path: 'preprocessor_config.json', size: 340 },
+      { path: 'model.bin', size: 3087284237 },
+    ],
+  },
+];
+const MODELSCOPE_BASE = 'https://modelscope.cn/models';
+function modelTotalBytes(def) { return def.files.reduce((a, f) => a + f.size, 0); }
+const modelDownloads = new Map(); // key -> { cancelled, abortController }
 
 const DEFAULT_SETTINGS = {
   device: 'auto',      // auto | gpu | cpu
@@ -100,11 +141,8 @@ function listModels(cfg) {
     if (fs.existsSync(root)) {
       for (const name of fs.readdirSync(root)) {
         const d = path.join(root, name);
-        const mb = path.join(d, 'model.bin');
-        if (fs.existsSync(mb)) {
-          let sizeMB = 0;
-          try { sizeMB = Math.round(fs.statSync(mb).size / 1048576); } catch (e) { /* ignore */ }
-          out.push({ key: name, sizeMB });
+        if (modelDirectoryInstalled(d, name)) {
+          out.push({ key: name, sizeMB: Math.round(fs.statSync(path.join(d, 'model.bin')).size / 1048576) });
         }
       }
     }
@@ -115,7 +153,7 @@ function listModels(cfg) {
 }
 function resolveModel(cfg, modelKey, gpu) {
   const root = modelRoot(cfg);
-  const has = (k) => !!k && fs.existsSync(path.join(root, k, 'model.bin'));
+  const has = (k) => !!k && modelInstalled(cfg, k);
   let key = modelKey;
   if (!key || key === 'auto') {
     if (gpu && has('medium')) key = 'medium';
@@ -126,8 +164,181 @@ function resolveModel(cfg, modelKey, gpu) {
     else key = '';
   }
   if (has(key)) return { key, dir: path.join(root, key) };
-  if (cfg.model && fs.existsSync(cfg.model)) return { key: path.basename(cfg.model), dir: cfg.model };
+  if (cfg.model && modelDirectoryInstalled(cfg.model, path.basename(cfg.model))) {
+    return { key: path.basename(cfg.model), dir: cfg.model };
+  }
   return { key: '', dir: '' };
+}
+
+/* ---------------- 模型目录 / 按需下载（魔搭 ModelScope） ---------------- */
+function modelDir(cfg, key) { return path.join(modelRoot(cfg), key); }
+// 离线包的元数据可来自不同转换版本，只检查必要文件，不要求其大小与下载站一致。
+function modelFileUsable(file, expected = 0) {
+  let stat;
+  try { stat = fs.statSync(file); } catch (e) { if (e.code === 'ENOENT') return false; throw e; }
+  if (!stat.isFile() || stat.size === 0 || (expected && stat.size !== expected)) return false;
+  if (/\.json(?:\.part)?$/.test(file)) {
+    let value;
+    try { value = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '')); }
+    catch (e) { if (e instanceof SyntaxError) return false; throw e; }
+    return value !== null && typeof value === 'object';
+  }
+  return true;
+}
+function modelDirectoryInstalled(dir, key) {
+  try {
+    const def = MODEL_CATALOG.find((d) => d.key === key.replace(/^faster-whisper-/, ''));
+    const weight = def && def.files.find((f) => f.path === 'model.bin');
+    return modelFileUsable(path.join(dir, 'model.bin'), weight ? weight.size : 0)
+      && modelFileUsable(path.join(dir, 'config.json'))
+      && modelFileUsable(path.join(dir, 'tokenizer.json'))
+      && (modelFileUsable(path.join(dir, 'vocabulary.txt')) || modelFileUsable(path.join(dir, 'vocabulary.json')));
+  } catch (e) { return false; }
+}
+function modelInstalled(cfg, key) {
+  return modelDirectoryInstalled(modelDir(cfg, key), key);
+}
+function getCatalog(cfg) {
+  return MODEL_CATALOG.map((d) => {
+    const total = modelTotalBytes(d);
+    let sizeMB = 0;
+    try { sizeMB = Math.round(fs.statSync(path.join(modelDir(cfg, d.key), 'model.bin')).size / 1048576); } catch (e) { sizeMB = 0; }
+    return {
+      key: d.key, name: d.name, desc: d.desc,
+      totalMB: Math.round(total / 1048576), installed: modelInstalled(cfg, d.key), sizeMB,
+    };
+  });
+}
+function sendModelEvent(payload) {
+  if (win && !win.isDestroyed()) win.webContents.send('model:event', payload);
+}
+
+// 写 .part，校验后发布；已存在的最终文件由用户管理，绝不覆盖。
+async function downloadFileWithResume(ctrl, url, dest, expected, onBytes) {
+  const part = dest + '.part';
+  const weightSize = path.basename(dest) === 'model.bin' ? expected : 0;
+  let controller;
+  let timer;
+  let timedOut = false;
+  const progress = (bytes) => { if (onBytes) onBytes(bytes); };
+  const existingFileError = () => new Error('目标文件已存在但不完整或不可用，请先移动该文件再重试：' + dest);
+  const publish = async () => {
+    if (ctrl.cancelled) throw new Error('已取消');
+    if (!modelFileUsable(part, weightSize)) throw new Error('文件内容无效，已保留断点：' + part);
+    try {
+      // link 是不覆盖的原子发布；不支持硬链接的文件系统使用排他复制。
+      try { await fs.promises.link(part, dest); }
+      catch (e) {
+        if (!['ENOTSUP', 'EOPNOTSUPP', 'EXDEV', 'EPERM'].includes(e.code)) throw e;
+        await fs.promises.copyFile(part, dest, fs.constants.COPYFILE_EXCL);
+      }
+    } catch (e) {
+      if (e.code !== 'EEXIST') throw e;
+      if (!modelFileUsable(dest, weightSize)) throw existingFileError();
+    }
+    await fs.promises.unlink(part);
+  };
+  try {
+    if (ctrl.cancelled) throw new Error('已取消');
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    if (modelFileUsable(dest, weightSize)) { progress(expected); return; }
+    if (fs.existsSync(dest)) throw existingFileError();
+    let start = 0;
+    try {
+      const stat = fs.statSync(part);
+      if (!stat.isFile()) throw new Error('断点路径不是文件：' + part);
+      start = stat.size;
+    } catch (e) { if (e.code !== 'ENOENT') throw e; }
+    if (start > expected) throw new Error('断点文件超过预期大小，请先移动该文件再重试：' + part);
+    if (start === expected) { await publish(); progress(expected); return; }
+
+    controller = new AbortController();
+    ctrl.abortController = controller;
+    const keepAlive = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => { timedOut = true; controller.abort(); }, 60000);
+    };
+    keepAlive();
+    const headers = start ? { Range: 'bytes=' + start + '-' } : {};
+    // Electron IncomingMessage 没有 pause/resume；fetch 的 Web Stream 可由 pipeline 施加背压。
+    const res = await net.fetch(url, { method: 'GET', headers, signal: controller.signal });
+    if (res.status !== 200 && res.status !== 206) throw new Error('HTTP ' + res.status);
+    let append = false;
+    if (res.status === 206) {
+      const range = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(res.headers.get('content-range') || '');
+      if (!range || Number(range[1]) !== start || Number(range[2]) !== expected - 1 || Number(range[3]) !== expected) {
+        throw new Error('服务器 Content-Range 不符，已保留原断点');
+      }
+      append = start > 0;
+    }
+    // 服务器忽略 Range 并返回 200 时，从头写 part，不能追加重复字节。
+    let got = append ? start : 0;
+    const length = res.headers.get('content-length');
+    if (length !== null && (!/^\d+$/.test(length) || Number(length) !== expected - got)) {
+      throw new Error('服务器 Content-Length 与预期文件大小不符，已保留原断点');
+    }
+    if (!res.body) throw new Error('服务器返回空响应');
+    const meter = new Transform({
+      transform(chunk, encoding, callback) {
+        if (got + chunk.length > expected) return callback(new Error('下载内容超过预期文件大小'));
+        got += chunk.length;
+        keepAlive();
+        progress(got);
+        callback(null, chunk);
+      },
+    });
+    await pipeline(Readable.fromWeb(res.body), meter, fs.createWriteStream(part, { flags: append ? 'a' : 'w' }), { signal: controller.signal });
+    if (ctrl.cancelled) throw new Error('已取消');
+    const size = fs.statSync(part).size;
+    if (size !== expected) throw new Error('文件大小不符（' + size + '/' + expected + '），已保留断点可重试');
+    await publish();
+  } catch (e) {
+    if (ctrl.cancelled) throw new Error('已取消，已保留断点可重试');
+    if (timedOut) throw new Error('下载超时，已保留断点，请检查网络后重试');
+    if (['EACCES', 'EPERM', 'EROFS'].includes(e.code)) {
+      throw new Error('模型目录没有读写权限：' + path.dirname(dest) + '。请检查目录权限，或将应用安装到可写目录后重试。');
+    }
+    if (e.code === 'ENOSPC') throw new Error('磁盘空间不足，已保留断点，请腾出空间后重试');
+    throw new Error('下载 ' + path.basename(dest) + ' 失败：' + ((e && e.message) || String(e)));
+  } finally {
+    clearTimeout(timer);
+    if (controller) controller.abort();
+    if (ctrl.abortController === controller) ctrl.abortController = null;
+  }
+}
+
+async function downloadModel(cfg, key) {
+  const def = MODEL_CATALOG.find((d) => d.key === key);
+  if (!def) { sendModelEvent({ type: 'error', key, message: '未知模型：' + key }); return; }
+  if (modelDownloads.has(key)) { sendModelEvent({ type: 'error', key, message: '该模型正在下载中' }); return; }
+
+  const ctrl = { cancelled: false, abortController: null };
+  modelDownloads.set(key, ctrl);
+  const total = modelTotalBytes(def);
+  let doneBytes = 0;
+  sendModelEvent({ type: 'start', key, received: 0, total, pct: 0 });
+  try {
+    if (modelInstalled(cfg, key)) { sendModelEvent({ type: 'done', key }); return; }
+    for (const f of def.files) {
+      if (ctrl.cancelled) throw new Error('已取消');
+      const url = MODELSCOPE_BASE + '/' + def.repo + '/resolve/master/' + encodeURIComponent(f.path);
+      const dest = path.join(modelDir(cfg, key), f.path);
+      const base = doneBytes;
+      await downloadFileWithResume(ctrl, url, dest, f.size, (got) => {
+        const received = base + got;
+        const pct = total ? Math.min(100, Math.round((received / total) * 1000) / 10) : 0;
+        sendModelEvent({ type: 'progress', key, file: f.path, received, total, pct });
+      });
+      doneBytes += f.size;
+    }
+    if (ctrl.cancelled) throw new Error('已取消');
+    if (!modelInstalled(cfg, key)) throw new Error('模型文件不完整或无效，请检查必要文件后重试');
+    sendModelEvent({ type: 'done', key });
+  } catch (e) {
+    sendModelEvent({ type: 'error', key, message: (e && e.message) || String(e) });
+  } finally {
+    modelDownloads.delete(key);
+  }
 }
 
 function runEngineOnce(cfg, subArgs, timeoutMs) {
@@ -235,6 +446,28 @@ function registerIpc() {
 
   ipcMain.handle('models:list', () => listModels(loadConfig()));
 
+  ipcMain.handle('models:catalog', () => getCatalog(loadConfig()));
+  ipcMain.handle('model:download', (_e, key) => {
+    const cfg = loadConfig();
+    if (!modelDownloads.has(key)) downloadModel(cfg, key);
+    return { ok: true };
+  });
+  ipcMain.handle('model:cancel', (_e, key) => {
+    const ctrl = modelDownloads.get(key);
+    if (ctrl) {
+      ctrl.cancelled = true;
+      if (ctrl.abortController) ctrl.abortController.abort();
+    }
+    return { ok: true };
+  });
+  ipcMain.handle('models:openDir', async () => {
+    const cfg = loadConfig();
+    const root = modelRoot(cfg);
+    try { fs.mkdirSync(root, { recursive: true }); } catch (e) { /* ignore */ }
+    try { shell.openPath(root); } catch (e) { /* ignore */ }
+    return root;
+  });
+
   ipcMain.handle('terms:get', () => getTerms());
   ipcMain.handle('terms:save', (_e, t) => { saveTerms(t); return getTerms(); });
 
@@ -286,7 +519,7 @@ function registerIpc() {
 
     const gpu = await probeGpu(cfg);
     const modelSel = resolveModel(cfg, settings.modelKey, gpu);
-    if (!modelSel.dir) return { ok: false, error: '未找到可用模型（models 目录为空）。' };
+    if (!modelSel.dir) return { ok: false, error: '还没有可用模型，请到「设置 → 模型」下载，或导入离线模型包。' };
 
     const device = settings.device === 'gpu' ? 'cuda' : (settings.device === 'cpu' ? 'cpu' : 'auto');
     let outDir = (payload && payload.outDir) || settings.outDir || cfg.outDir;

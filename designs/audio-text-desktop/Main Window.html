@@ -344,8 +344,8 @@
   <div class="toast" id="toast"></div>
 
 <script>
-  const SAMPLE_TEXT = "面试官您好，我叫陈紫坤，2024 年毕业于华北水利水电大学，有两年左右数据开发经验。主要做过两个项目：一是反洗钱准实时监测，用 Kafka + Flink 做实时预警；二是新核心数仓国产化迁移，我负责贷款主题的模型改造、表迁移、指标开发与新老双跑校验。";
-  const RESULT_SAMPLE = "面试官您好，我叫陈紫坤，2024 年毕业于华北水利水电大学，有两年左右数据开发经验。\n\n之前是在贵阳银行做数据开发，外包过去的，主要做了两个项目：一个是反洗钱准实时监测，用 Kafka + Flink 做实时预警；另一个是新核心国产化迁移，我负责贷款业务主题的整体转换。\n\n新核心这块主要是把老 Oracle 核心迁到国产易鲸捷 QianBase，我负责贷款主题的模型改造、表结构迁移、指标开发和新老双跑校验，同时也做了 SQL 性能调优。";
+  const SAMPLE_TEXT = "欢迎参加产品评审会。本次会议讨论本地音视频转写工具的使用流程：添加文件、选择设备与模型、开始转写，以及复制和导出文字稿。所有示例均为虚构演示内容。";
+  const RESULT_SAMPLE = "欢迎参加产品评审会。本次会议讨论音视频转写工具的使用流程。\n\n首先，用户可以拖入多个音视频文件，确认列表后统一开始。设备支持自动、GPU和CPU；模型可以按需下载，也可以从本地离线包导入。\n\n转写完成后可以查看正文、复制全文，或打开输出目录获取文本和字幕。音视频始终在本机处理；只有用户主动下载模型时才联网。以上文字为虚构演示内容。";
   const listEl = document.getElementById('list');
   const countEl = document.getElementById('count');
   const toastEl = document.getElementById('toast');

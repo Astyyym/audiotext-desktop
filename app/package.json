@@ -1,6 +1,6 @@
 {
   "name": "audiotext-desktop",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "AudioText Desktop · 本地离线音视频转文字桌面应用",
   "private": true,
   "author": "AudioText Desktop",
@@ -31,8 +31,7 @@
     "extraResources": [
       { "from": "../build/engine-dist/engine", "to": "engine" },
       { "from": "../bin", "to": "bin" },
-      { "from": "../cuda", "to": "cuda" },
-      { "from": "../models/small", "to": "models/small" }
+      { "from": "../cuda", "to": "cuda" }
     ],
     "win": {
       "target": ["nsis"],

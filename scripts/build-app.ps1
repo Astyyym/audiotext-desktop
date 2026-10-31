@@ -1,8 +1,8 @@
-# Package the Electron app together with engine.exe / ffmpeg / model.
+# Package the Electron app with engine.exe / ffmpeg / CUDA (no bundled models).
 # Prereq (run once):
 #   & scripts/build-engine.ps1 -Python <venv-python>
 #   & scripts/fetch-ffmpeg.ps1
-#   models/small/model.bin must exist
+#   CUDA DLLs must exist under cuda/; models are downloaded or imported separately.
 # Usage:
 #   & scripts/build-app.ps1            # unpacked dir  -> release/win-unpacked
 #   & scripts/build-app.ps1 -Target nsis   # installer    -> release/*.exe
@@ -16,7 +16,7 @@ $appDir = Join-Path $root 'app'
 
 if (-not (Test-Path (Join-Path $root 'build\engine-dist\engine\engine.exe'))) { throw "engine.exe missing. Run scripts/build-engine.ps1 first." }
 if (-not (Test-Path (Join-Path $root 'bin\ffmpeg.exe'))) { throw "bin/ffmpeg.exe missing. Run scripts/fetch-ffmpeg.ps1 first." }
-if (-not (Test-Path (Join-Path $root 'models\small\model.bin'))) { throw "models/small/model.bin missing." }
+# 模型不再随安装包内置（改为安装后在应用内按需下载，或导入离线模型包）。
 
 $env:ELECTRON_RUN_AS_NODE = $null
 if (-not $env:ELECTRON_MIRROR) { $env:ELECTRON_MIRROR = 'https://npmmirror.com/mirrors/electron/' }

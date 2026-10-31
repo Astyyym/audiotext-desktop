@@ -266,3 +266,18 @@ select.input{cursor:pointer;padding-right:6px;}
 .head-tools-wrap{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:6px;max-width:64%;}
 .head-tools-wrap .head-tools{margin-left:0;}
 .head-hint{font-size:11.5px;color:var(--muted);text-align:right;line-height:1.45;}
+
+/* ---------- 模型下载管理 ---------- */
+.model-list{display:flex;flex-direction:column;gap:10px;}
+.model-item{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fbfcfe;}
+.mi-info{flex:1;min-width:180px;}
+.mi-name{font-size:13.5px;font-weight:650;color:var(--text);}
+.mi-tag{font-size:11px;font-weight:600;color:var(--accent-ink);background:var(--accent-soft);border-radius:6px;padding:1px 6px;margin-left:4px;}
+.mi-desc{margin-top:3px;font-size:11.5px;color:var(--muted);}
+.mi-right{display:flex;align-items:center;gap:8px;}
+.mi-status{font-size:12px;color:var(--muted);}
+.mi-status.ok{color:var(--ok);} .mi-status.run{color:var(--accent-ink);} .mi-status.err{color:var(--err);}
+.mi-prog{flex-basis:100%;margin-top:8px;}
+.mi-prog .bar{height:6px;border-radius:4px;background:#eceff4;overflow:hidden;}
+.mi-prog .bar > i{display:block;height:100%;background:var(--accent);border-radius:4px;transition:width .3s ease;}
+.mi-err{display:block;margin-top:4px;font-size:11.5px;color:var(--err);}

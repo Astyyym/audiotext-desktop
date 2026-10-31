@@ -7,6 +7,15 @@ contextBridge.exposeInMainWorld('api', {
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (patch) => ipcRenderer.invoke('settings:set', patch),
   listModels: () => ipcRenderer.invoke('models:list'),
+  getModelCatalog: () => ipcRenderer.invoke('models:catalog'),
+  downloadModel: (key) => ipcRenderer.invoke('model:download', key),
+  cancelModelDownload: (key) => ipcRenderer.invoke('model:cancel', key),
+  openModelsDir: () => ipcRenderer.invoke('models:openDir'),
+  onModelEvent: (cb) => {
+    const handler = (_e, data) => cb(data);
+    ipcRenderer.on('model:event', handler);
+    return () => ipcRenderer.removeListener('model:event', handler);
+  },
   pickDir: () => ipcRenderer.invoke('dialog:pickDir'),
 
   getTerms: () => ipcRenderer.invoke('terms:get'),

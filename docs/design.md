@@ -18,7 +18,7 @@
 │  cli.py        对外命令/事件
 └─────────────┬──────────────┘
               │
-   ffmpeg 静态二进制 / 模型文件 / CUDA 运行库（随安装包内置）
+   ffmpeg 静态二进制 / CUDA 运行库（随安装包内置）；模型（独立下载或导入）
 ```
 
 ## 2. 选型
@@ -40,7 +40,7 @@
   否则 → CPU 档（small / int8，可切 medium）
 （二期）Intel/AMD 核显 → whisper.cpp(Vulkan) 或 OpenVINO
 ```
-用户可手动覆盖为「质量优先 / 均衡 / 速度优先」。
+用户可手动选择设备与已安装模型。模型自动档：有 GPU 时优先 medium、large-v3、small；无 GPU 时优先 small、medium、large-v3。上图显存建议用于手动选型，不代表自动探测显存容量。
 
 ## 4. 引擎双轨
 | 轨 | 后端 | 适用 | 阶段 |
@@ -75,16 +75,17 @@
 - 「复制全文」= 复制 `.txt` 内容；「复制带时间戳」= 取 `.md`/`.srt`。
 
 ## 7. 打包方案（概要）
-- 安装包（Inno Setup/NSIS）内置：程序、引擎、ffmpeg、基础模型 `small`。
-- 可选组件：`medium`、`large-v3`、`CUDA 运行库 DLL`。
+- 安装包（NSIS）内置：程序、引擎、ffmpeg、CUDA 运行库；不内置任何模型。
+- 模型页默认从魔搭 ModelScope 下载 small / medium / large-v3 的 CTranslate2 文件到 `resources/models/<key>/`，支持取消、断点续传；仅用户主动点击时联网。
+- 离线包顶层包含 `small/`、`medium/`、`large-v3/`，解压至 `resources/models/`，刷新模型列表或重启即可识别。
 - CUDA DLL 放入安装目录，sidecar 启动时 `os.add_dll_directory` + PATH；用户只需 NVIDIA 驱动。
-- 不使用单文件 onefile（每次解压 3G 极慢）。
+- 不使用单文件 onefile（每次启动解压大体积资源较慢）。Windows 安装器由 `scripts/build-app.ps1` 生成，第三方资源按各自许可分发。
 
 ## 8. 安全与隐私
 - 全本地、不埋点、不上传；临时音频任务结束即删；输出写用户指定目录。
 
 ## 9. UI 原型（主界面）
-- 主稿：`designs/audio-text-desktop/Main Window.html`（单文件，可直接双击打开；`preview.png` 为渲染预览）。
+- 早期结构原型：`designs/audio-text-desktop/Main Window.html`（匿名演示内容，可直接打开）；当前产品界面以 README 中真实 Windows Electron 截图为准，旧原型预览图仅本地保留。
 - 已确认方向：浅色 · 简洁专业；主流桌面工具结构；本稿覆盖**主界面（拖拽区 + 任务队列）**；一套精修。
 - 覆盖状态：排队中 / 转写中（进度+实时倍率+剩余）/ 已完成 / 失败（重试）。
 - 已完成行操作：**复制全文 · 展开预览 · 打开目录 · 移除**；点击「展开预览」在该行下方展开转写结果预览（可滚动、再次点击收起）。

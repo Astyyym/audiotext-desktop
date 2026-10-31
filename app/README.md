@@ -51,8 +51,8 @@ npm start            # 启动应用
 - **设置**：设备（自动/GPU/CPU）、模型（auto/small/medium/large-v3）、输出目录、语言、输入输出格式、术语校正开关；持久化到 userData。
 - **历史记录**：本地保存最近 300 条（文件名/模型/设备/耗时/字数/输出），可打开输出、复制全文、重转、清空。
 - **术语库**：维护「术语提示词」与「误写→正写」替换规则，转写时作为 `--terms` 传给引擎。
-- GPU：打包内置 `cuda/`（cublas），`device=auto` 时 NVIDIA 机器自动用 GPU；`auto` 模型在 GPU 上选 medium（未装则 small）、无 GPU 用 small。
-- 全程本地调用引擎，运行期不联网、不上传。
+- GPU：打包内置 `cuda/`（cublas），`device=auto` 时 NVIDIA 机器自动用 GPU；自动模型在已安装模型中，有 GPU 按 medium → large-v3 → small，无 GPU 按 small → medium → large-v3 选择。
+- 引擎在本地离线转写，不上传音视频；模型页仅在用户点击下载时从魔搭联网获取模型。v0.4 不内置模型，支持下载或离线导入后刷新。
 
 ## 架构
 ```
@@ -68,6 +68,5 @@ main.js  ── BrowserWindow / IPC / spawn `python -m engine.cli ... --progress
 - 安全：`contextIsolation:true`、`nodeIntegration:false`，渲染层只能通过 `window.api` 调受限能力。
 
 ## 非目标（留给后续阶段）
-- 安装器与代码签名（M3）；
-- 术语库 / 历史记录 / 设置页（当前为导航占位）；
+- 代码签名、自动更新；
 - 并发多任务、断点续跑、md/json 导出开关。

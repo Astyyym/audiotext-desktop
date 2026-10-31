@@ -44,5 +44,6 @@ python -m engine.cli transcribe \
 
 ## 说明 / 待办
 - 已内置 whisper 静音幻觉过滤（如"请不吝点赞…"）。
-- 术语校正（terms.json）为 P2，暂未纳入。
-- 引擎尚未包含 UI；M2 由 Electron 壳调用。
+- `--terms path/to/terms.json` 支持术语提示词和误写替换规则。
+- `--lang auto` 自动识别语言；输出同名时整组加序号，保留原有文字稿。
+- Electron 界面由 `app/` 提供。
