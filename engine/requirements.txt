@@ -1,0 +1,8 @@
+# Python 侧引擎依赖（M1 原型实测版本）
+# 国内安装建议加镜像：--index-url https://pypi.tuna.tsinghua.edu.cn/simple
+faster-whisper==1.2.1
+ctranslate2==4.8.4
+av==18.1.0
+onnxruntime==1.31.1
+numpy==2.4.6
+tokenizers==0.23.3

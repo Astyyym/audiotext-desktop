@@ -1,0 +1,18 @@
+{
+  "type": "design",
+  "designSystems": [],
+  "primaryDesignSystem": null,
+  "assets": {
+    "Main Window": {
+      "versions": [
+        {
+          "path": "Main Window.html",
+          "createdAt": "2026-10-31T02:57:39.980Z",
+          "status": "approved"
+        }
+      ]
+    }
+  },
+  "createdAt": "2026-10-31T02:57:39.982Z",
+  "updatedAt": "2026-10-31T03:30:32.361Z"
+}

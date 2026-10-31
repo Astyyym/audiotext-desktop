@@ -1,0 +1,65 @@
+# 忽略规则（项目初始化）
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.eggs/
+build/
+dist/
+*.spec
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Node / 前端 ----
+node_modules/
+out/
+.output/
+.vite/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# ---- 模型与二进制（体积大，不进仓库；用发布包/对象存储分发） ----
+models/
+cuda/
+*.bin
+*.gguf
+*.onnx
+*.pt
+bin/ffmpeg.exe
+bin/ffprobe.exe
+
+# ---- 构建产物 ----
+release/
+installer/output/
+*.exe
+*.msi
+*.dmg
+*.AppImage
+
+# ---- 运行产物 / 示例输出 ----
+output/
+samples_out/
+*.tmp
+.tmp_test/
+
+# ---- 系统 ----
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# ---- 本地配置 / 密钥 ----
+.env
+*.local
+config.local.*
+
+# 说明：docs/internal/ 为内部工作记录（plan/task-state/findings/progress），
+# 若仓库转为公开，发布前需一并排除该目录（见 AGENTS.md §4）。
+
+test.txt
