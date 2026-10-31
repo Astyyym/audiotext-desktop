@@ -1,0 +1,51 @@
+{
+  "name": "audiotext-desktop",
+  "version": "0.3.2",
+  "description": "AudioText Desktop · 本地离线音视频转文字桌面应用",
+  "private": true,
+  "author": "AudioText Desktop",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist:dir": "electron-builder --win --dir",
+    "dist": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "40.9.3",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "com.audiotext.desktop",
+    "productName": "AudioText Desktop",
+    "directories": {
+      "output": "../release"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "config.js",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "extraResources": [
+      { "from": "../build/engine-dist/engine", "to": "engine" },
+      { "from": "../bin", "to": "bin" },
+      { "from": "../cuda", "to": "cuda" },
+      { "from": "../models/small", "to": "models/small" }
+    ],
+    "win": {
+      "target": ["nsis"],
+      "signAndEditExecutable": false,
+      "artifactName": "AudioTextDesktop-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "AudioText Desktop"
+    }
+  }
+}

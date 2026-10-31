@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AudioText Desktop · 主界面</title>
+<!--
+  设计说明（给评审的上下文，不会渲染）
+  目标：AudioText Desktop 桌面应用「主界面」高保真交互稿。
+  方向（按用户确认）：浅色 · 简洁专业；主流桌面工具结构；只做主界面（拖拽区 + 任务队列）；1 套精修。
+  设计推理：
+   - 桌面效率工具，用户高频重复操作，所以信息要一眼可读、操作要少一步到位。
+   - 主任务只有两件："把文件放进来" 和 "看队列跑没跑完 / 拿走文本"，因此用「大拖拽区 + 队列列表」单列主线，不做多余面板。
+   - 设备/模型/输出格式属于"一次设定、长期沿用"，收到顶部工具条，不抢主视觉。
+   - 配色克制：中性灰阶 + 单一蓝色强调；状态用语义色（绿=完成、琥珀=排队、红=失败），不用渐变/emoji。
+   - 字体走系统中文字体栈，正文行高 1.6，符合中文阅读。
+-->
+<style>
+  :root{
+    --outer:#e9ecf1;
+    --win:#ffffff;
+    --side:#fafbfc;
+    --text:#1c1f24;
+    --sub:#5f6672;
+    --muted:#9aa1ab;
+    --line:#e9ebef;
+    --line-2:#e0e3e8;
+    --accent:#2f6bff;
+    --accent-ink:#1e4fd6;
+    --accent-soft:#eef3ff;
+    --ok:#12944f;
+    --ok-soft:#e9f7ef;
+    --warn:#b7791f;
+    --warn-soft:#fdf3e3;
+    --err:#d8423c;
+    --err-soft:#fdecea;
+    --radius:14px;
+    --shadow:0 24px 60px -20px rgba(23,32,56,.28), 0 8px 24px -12px rgba(23,32,56,.18);
+    --sans:-apple-system,"SF Pro Text","PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;font-family:var(--sans);color:var(--text);background:var(--outer);
+    display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;overflow:auto;
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+  }
+  .window{
+    width:min(1340px,100%);min-width:1024px;height:min(900px,calc(100vh - 48px));
+    background:var(--win);border-radius:16px;overflow:hidden;
+    box-shadow:var(--shadow);border:1px solid rgba(20,30,50,.06);
+    display:flex;flex-direction:column;
+  }
+
+  /* ---------- 标题栏 ---------- */
+  .titlebar{
+    height:48px;flex:0 0 48px;display:flex;align-items:center;gap:12px;
+    padding:0 14px 0 16px;border-bottom:1px solid var(--line);background:#fff;
+    user-select:none;
+  }
+  .mark{
+    width:26px;height:26px;border-radius:8px;background:var(--accent);
+    display:grid;place-items:center;flex:0 0 auto;
+  }
+  .mark svg{width:15px;height:15px;display:block;}
+  .brand{display:flex;align-items:baseline;gap:7px;font-size:14px;letter-spacing:.1px;}
+  .brand b{font-weight:650;}
+  .brand span{color:var(--muted);font-size:12px;}
+  .titlebar .spacer{flex:1;}
+  .win-ctrl{display:flex;align-items:center;gap:2px;}
+  .win-ctrl button{width:32px;height:28px;border:none;background:transparent;color:#8a9099;display:grid;place-items:center;border-radius:6px;}
+  .win-ctrl button svg{width:11px;height:11px;}
+  .win-ctrl button.close:hover{background:#e81123;color:#fff;}
+  .win-ctrl button:hover{background:#f1f3f7;color:#1c1f24;}
+
+  /* ---------- 主体 ---------- */
+  .app{flex:1;display:flex;min-height:0;}
+
+  /* 侧边栏 */
+  .sidebar{
+    width:236px;flex:0 0 236px;background:var(--side);
+    border-right:1px solid var(--line);padding:16px 12px;display:flex;flex-direction:column;
+  }
+  .nav-label{font-size:11px;color:var(--muted);letter-spacing:.6px;margin:6px 10px 8px;text-transform:uppercase;}
+  .nav{display:flex;flex-direction:column;gap:2px;}
+  .nav a{
+    display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;
+    color:var(--sub);text-decoration:none;font-size:13.5px;line-height:1;transition:background .15s,color .15s;
+  }
+  .nav a svg{width:17px;height:17px;flex:0 0 auto;opacity:.9;}
+  .nav a:hover{background:#eef1f6;color:var(--text);}
+  .nav a.active{background:var(--accent-soft);color:var(--accent-ink);font-weight:600;}
+  .nav a.active svg{opacity:1;}
+  .side-spacer{flex:1;}
+  .env{
+    margin-top:10px;padding:12px;border:1px solid var(--line);border-radius:11px;background:#fff;
+  }
+  .env .row{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--sub);}
+  .env .row + .row{margin-top:8px;}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);flex:0 0 auto;box-shadow:0 0 0 3px var(--ok-soft);}
+  .env .k{color:var(--muted);width:44px;flex:0 0 auto;}
+  .env .v{color:var(--text);font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+  /* 主内容 */
+  .main{flex:1;min-width:0;display:flex;flex-direction:column;background:#fff;}
+  .main-head{
+    padding:22px 26px 16px;display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;
+  }
+  .main-head h1{margin:0;font-size:19px;font-weight:650;letter-spacing:.2px;}
+  .main-head p{margin:6px 0 0;font-size:13px;color:var(--muted);line-height:1.5;}
+  .head-tools{margin-left:auto;display:flex;align-items:center;gap:8px;}
+  .field{
+    display:flex;align-items:center;gap:7px;height:36px;padding:0 11px;border:1px solid var(--line-2);
+    border-radius:9px;background:#fff;font-size:13px;color:var(--text);cursor:pointer;user-select:none;transition:border-color .15s,box-shadow .15s;
+  }
+  .field:hover{border-color:#cfd6e2;}
+  .field .lbl{color:var(--muted);font-size:12px;}
+  .field svg{width:14px;height:14px;color:var(--muted);}
+  .btn{
+    height:36px;padding:0 15px;border-radius:9px;border:1px solid transparent;
+    font-family:var(--sans);font-size:13px;font-weight:550;cursor:pointer;display:inline-flex;align-items:center;gap:7px;
+    transition:background .15s,border-color .15s,box-shadow .15s,color .15s;
+  }
+  .btn svg{width:15px;height:15px;}
+  .btn-primary{background:var(--accent);color:#fff;box-shadow:0 1px 2px rgba(47,107,255,.35);}
+  .btn-primary:hover{background:var(--accent-ink);}
+  .btn-ghost{background:#fff;border-color:var(--line-2);color:var(--text);}
+  .btn-ghost:hover{background:#f6f8fb;border-color:#cfd6e2;}
+  .btn-sm{height:30px;padding:0 11px;font-size:12.5px;border-radius:8px;}
+
+  /* 拖拽区 */
+  .dropzone{
+    margin:0 26px;border:1.5px dashed #cdd4e0;border-radius:var(--radius);
+    background:#fcfdff;padding:30px 20px;display:flex;flex-direction:column;align-items:center;text-align:center;
+    transition:border-color .15s,background .15s;cursor:pointer;
+  }
+  .dropzone:hover{border-color:#a9b7d8;background:#fafcff;}
+  .dropzone.drag{border-color:var(--accent);background:var(--accent-soft);}
+  .dz-icon{
+    width:46px;height:46px;border-radius:13px;background:var(--accent-soft);display:grid;place-items:center;margin-bottom:12px;
+  }
+  .dz-icon svg{width:23px;height:23px;color:var(--accent);}
+  .dz-title{font-size:15px;font-weight:600;}
+  .dz-title em{color:var(--accent);font-style:normal;}
+  .dz-sub{margin-top:6px;font-size:12.5px;color:var(--muted);}
+  .dz-formats{margin-top:12px;display:flex;gap:6px;flex-wrap:wrap;justify-content:center;}
+  .fmt{font-size:11px;color:var(--sub);background:#fff;border:1px solid var(--line);padding:3px 8px;border-radius:20px;}
+  .dz-note{margin-top:12px;font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:6px;}
+  .dz-note svg{width:12px;height:12px;color:var(--ok);}
+
+  /* 队列 */
+  .queue-head{
+    display:flex;align-items:center;gap:10px;padding:20px 26px 10px;
+  }
+  .queue-head h2{margin:0;font-size:14px;font-weight:650;}
+  .count{font-size:12px;color:var(--sub);background:#eef1f6;border-radius:20px;padding:2px 9px;font-weight:550;}
+  .queue-head .spacer{flex:1;}
+  .link-btn{background:none;border:none;color:var(--sub);font-family:var(--sans);font-size:12.5px;cursor:pointer;padding:4px 6px;border-radius:6px;}
+  .link-btn:hover{background:#f1f4f8;color:var(--text);}
+
+  .list{padding:0 26px 22px;display:flex;flex-direction:column;gap:9px;overflow:auto;min-height:0;scrollbar-gutter:stable;scrollbar-width:thin;}
+  .task{
+    display:grid;grid-template-columns:40px minmax(0,1fr) 520px;align-items:center;gap:14px;
+    border:1px solid var(--line);border-radius:12px;padding:13px 14px;background:#fff;transition:border-color .15s,box-shadow .15s;
+  }
+  .rightzone{display:flex;align-items:center;gap:14px;min-width:0;}
+  .task:hover{border-color:#dfe4ec;box-shadow:0 2px 10px -6px rgba(20,30,50,.25);}
+  .ftype{
+    width:40px;height:40px;border-radius:10px;display:grid;place-items:center;font-size:10.5px;font-weight:700;letter-spacing:.3px;
+    background:#eef2f7;color:#516074;text-transform:uppercase;
+  }
+  .ftype.audio{background:#eef3ff;color:#2f6bff;}
+  .ftype.video{background:#f3eefc;color:#7b52c9;}
+  .finfo{min-width:0;}
+  .fname{font-size:13.5px;font-weight:560;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .fmeta{margin-top:3px;font-size:11.5px;color:var(--muted);display:flex;gap:8px;}
+  .fmeta .sep{color:#d3d8e0;}
+
+  .status{flex:1 1 auto;min-width:0;}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:550;padding:3px 9px;border-radius:20px;}
+  .pill .d{width:6px;height:6px;border-radius:50%;}
+  .pill.ok{background:var(--ok-soft);color:var(--ok);} .pill.ok .d{background:var(--ok);}
+  .pill.wait{background:var(--warn-soft);color:var(--warn);} .pill.wait .d{background:var(--warn);}
+  .pill.err{background:var(--err-soft);color:var(--err);} .pill.err .d{background:var(--err);}
+  .pill.run{background:var(--accent-soft);color:var(--accent-ink);} .pill.run .d{background:var(--accent);animation:pulse 1.1s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .prog{margin-top:8px;height:5px;border-radius:4px;background:#eceff4;overflow:hidden;}
+  .prog > i{display:block;height:100%;background:var(--accent);border-radius:4px;transition:width .4s ease;}
+  .prog-txt{margin-top:6px;font-size:11px;color:var(--muted);display:flex;justify-content:space-between;}
+  .st-meta{margin-top:7px;font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+  .actions{flex:0 0 auto;display:flex;align-items:center;gap:6px;justify-content:flex-end;}
+  .icon-btn{
+    width:32px;height:32px;border-radius:8px;border:1px solid var(--line-2);background:#fff;color:var(--sub);
+    display:grid;place-items:center;cursor:pointer;transition:.15s;
+  }
+  .icon-btn:hover{background:#f6f8fb;color:var(--text);border-color:#cfd6e2;}
+  .icon-btn svg{width:15px;height:15px;}
+  .act-txt{
+    height:32px;padding:0 11px;border-radius:8px;border:1px solid var(--line-2);background:#fff;color:var(--text);
+    font-family:var(--sans);font-size:12.5px;font-weight:550;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:.15s;
+  }
+  .act-txt:hover{background:#f6f8fb;border-color:#cfd6e2;}
+  .act-txt.done{color:var(--ok);border-color:#bfe6cf;background:var(--ok-soft);}
+  .act-txt svg{width:13px;height:13px;}
+
+  /* 结果预览（已完成任务展开） */
+  .preview{grid-column:1 / -1;margin-top:5px;padding:12px 14px;background:#fbfcfe;border:1px solid var(--line);border-radius:10px;}
+  .pv-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;}
+  .pv-label{font-size:11.5px;color:var(--text);font-weight:600;}
+  .pv-t{font-size:11px;color:var(--muted);}
+  .pv-body{font-size:12.5px;line-height:1.8;color:var(--sub);max-height:158px;overflow:auto;white-space:pre-wrap;}
+
+  .toast{
+    position:fixed;left:50%;bottom:34px;transform:translateX(-50%) translateY(16px);
+    background:#1f2630;color:#fff;font-size:13px;padding:10px 16px;border-radius:10px;opacity:0;pointer-events:none;
+    transition:opacity .2s,transform .2s;box-shadow:0 10px 30px -8px rgba(0,0,0,.4);z-index:50;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  .foot{padding:0 26px 18px;font-size:11px;color:#b3bac4;display:flex;align-items:center;gap:6px;}
+  .foot svg{width:12px;height:12px;color:#c2c8d1;}
+
+  @media (max-width:1120px){
+    .sidebar{width:200px;flex-basis:200px;}
+    .task{grid-template-columns:40px minmax(0,1fr) 440px;}
+    .head-tools{flex-wrap:wrap;}
+  }
+</style>
+</head>
+<body>
+  <div class="window" data-screen-label="01 主界面">
+    <!-- 标题栏 -->
+    <div class="titlebar">
+      <div class="mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 12h2.2M8 7.5v9M12 4v16M16 7.5v9M20 12h-.2" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>
+      </div>
+      <div class="brand"><b>AudioText</b><span>Desktop</span></div>
+      <div class="spacer"></div>
+      <div class="win-ctrl" aria-hidden="true">
+        <button title="最小化"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 6h8"/></svg></button>
+        <button title="最大化"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2.5" y="2.5" width="7" height="7" rx="1"/></svg></button>
+        <button class="close" title="关闭"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.35"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
+      </div>
+    </div>
+
+    <div class="app">
+      <!-- 侧边栏 -->
+      <aside class="sidebar">
+        <div class="nav-label">工作区</div>
+        <nav class="nav">
+          <a href="#" class="active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 21h16"/></svg>
+            转写
+          </a>
+          <a href="#">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            历史记录
+          </a>
+          <a href="#">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v14H4z"/><path d="M4 9h16M9 9v10"/></svg>
+            术语库
+          </a>
+        </nav>
+        <div class="nav-label" style="margin-top:18px;">偏好</div>
+        <nav class="nav">
+          <a href="#">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5 2 2 0 1 1-4 0 1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1 2 2 0 1 1 0-4 1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5 2 2 0 1 1 4 0 1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1 2 2 0 1 1 0 4 1.6 1.6 0 0 0-1.5 1z"/></svg>
+            设置
+          </a>
+        </nav>
+        <div class="side-spacer"></div>
+        <div class="env">
+          <div class="row"><span class="dot"></span><span class="k">运行</span><span class="v">GPU 加速 · 就绪</span></div>
+          <div class="row"><span class="k">模型</span><span class="v">large-v3</span></div>
+          <div class="row"><span class="k">输出</span><span class="v">TXT · SRT</span></div>
+        </div>
+      </aside>
+
+      <!-- 主内容 -->
+      <main class="main">
+        <div class="main-head">
+          <div>
+            <h1>新建转写</h1>
+            <p>把音视频拖进来，本地转成文字，一键复制去做总结。</p>
+          </div>
+          <div class="head-tools">
+            <div class="field" title="设备">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg>
+              <span class="lbl">设备</span><b style="font-weight:600;">GPU</b>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+            </div>
+            <div class="field" title="模型">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3 3 8l9 5 9-5-9-5Z"/><path d="m3 13 9 5 9-5"/></svg>
+              <span class="lbl">模型</span><b style="font-weight:600;">large-v3</b>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+            </div>
+            <button class="btn btn-primary" id="startAll">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5-11-6.5Z"/></svg>
+              开始全部
+            </button>
+          </div>
+        </div>
+
+        <!-- 拖拽区 -->
+        <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="拖入或选择音视频文件">
+          <div class="dz-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+          </div>
+          <div class="dz-title">拖入音视频，<em>开始转写</em></div>
+          <div class="dz-sub">或 <a href="#" id="pick" style="color:var(--accent);text-decoration:none;">点击选择文件</a> · 可一次拖入多个</div>
+          <div class="dz-formats">
+            <span class="fmt">M4A</span><span class="fmt">MP4</span><span class="fmt">MOV</span><span class="fmt">M4V</span>
+            <span class="fmt">WAV</span><span class="fmt">MP3</span><span class="fmt">AAC</span><span class="fmt">FLAC</span>
+            <span class="fmt">OGG</span><span class="fmt">OPUS</span><span class="fmt">AMR</span><span class="fmt">WMA</span>
+            <span class="fmt">AIFF</span><span class="fmt">MKV</span><span class="fmt">WEBM</span><span class="fmt">AVI</span>
+            <span class="fmt">FLV</span><span class="fmt">WMV</span><span class="fmt">3GP</span><span class="fmt">TS</span><span class="fmt">M2TS</span>
+            <span class="fmt">RMVB</span><span class="fmt">MPEG</span><span class="fmt">ASF</span><span class="fmt">DV</span>
+          </div>
+          <div class="dz-note">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+            全部在本机处理，音视频不上传云端
+          </div>
+        </div>
+        <input type="file" id="fileInput" accept="audio/*,video/*" multiple hidden>
+
+        <!-- 队列 -->
+        <div class="queue-head">
+          <h2>任务队列</h2>
+          <span class="count" id="count">4</span>
+          <div class="spacer"></div>
+          <button class="link-btn" id="clearDone">清空已完成</button>
+        </div>
+        <div class="list" id="list"></div>
+
+        <div class="foot">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 12h6"/></svg>
+          本地引擎 · 离线运行 · 不联网
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+  const SAMPLE_TEXT = "面试官您好，我叫陈紫坤，2024 年毕业于华北水利水电大学，有两年左右数据开发经验。主要做过两个项目：一是反洗钱准实时监测，用 Kafka + Flink 做实时预警；二是新核心数仓国产化迁移，我负责贷款主题的模型改造、表迁移、指标开发与新老双跑校验。";
+  const RESULT_SAMPLE = "面试官您好，我叫陈紫坤，2024 年毕业于华北水利水电大学，有两年左右数据开发经验。\n\n之前是在贵阳银行做数据开发，外包过去的，主要做了两个项目：一个是反洗钱准实时监测，用 Kafka + Flink 做实时预警；另一个是新核心国产化迁移，我负责贷款业务主题的整体转换。\n\n新核心这块主要是把老 Oracle 核心迁到国产易鲸捷 QianBase，我负责贷款主题的模型改造、表结构迁移、指标开发和新老双跑校验，同时也做了 SQL 性能调优。";
+  const listEl = document.getElementById('list');
+  const countEl = document.getElementById('count');
+  const toastEl = document.getElementById('toast');
+
+  let seed = 0;
+  const tasks = [
+    {id:++seed, name:'产品评审会-20261030.m4a', kind:'audio', dur:1860, size:'24.1 MB', status:'running', progress:42, speed:'8.9×', left:'1 分 20 秒'},
+    {id:++seed, name:'客户访谈_录音片段2.m4a', kind:'audio', dur:735, size:'11.2 MB', status:'done', elapsed:'1 分 24 秒', expanded:true},
+    {id:++seed, name:'培训录像_第03讲.mp4', kind:'video', dur:3620, size:'128 MB', status:'queued'},
+    {id:++seed, name:'旧会议_终稿.wav', kind:'audio', dur:1504, size:'27.6 MB', status:'queued'}
+  ];
+
+  const fmtDur = s => {const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60; return (h?h+':':'')+String(m).padStart(h?2:1,'0')+':'+String(x).padStart(2,'0');};
+
+  function statusBlock(t){
+    if(t.status==='running'){
+      return `<div class="status">
+        <span class="pill run"><span class="d"></span>转写中</span>
+        <div class="prog"><i style="width:${t.progress}%"></i></div>
+        <div class="prog-txt"><span>${t.progress}% · ${t.speed} 实时</span><span>剩余 ${t.left}</span></div>
+      </div>`;
+    }
+    if(t.status==='done'){
+      return `<div class="status"><span class="pill ok"><span class="d"></span>已完成</span><div class="st-meta">用时 ${t.elapsed} · 已生成 TXT / SRT</div></div>`;
+    }
+    if(t.status==='failed'){
+      return `<div class="status"><span class="pill err"><span class="d"></span>失败</span><div class="st-meta">音频解码失败，可重试</div></div>`;
+    }
+    return `<div class="status"><span class="pill wait"><span class="d"></span>排队中</span><div class="st-meta">等待开始</div></div>`;
+  }
+
+  function actionsBlock(t){
+    if(t.status==='done'){
+      return `<div class="actions">
+        <button class="act-txt" data-act="copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>复制全文</button>
+        <button class="act-txt" data-act="preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="2.6"/></svg>${t.expanded?'收起预览':'展开预览'}</button>
+        <button class="icon-btn" data-act="open" title="打开所在文件夹"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg></button>
+        <button class="icon-btn" data-act="remove" title="移除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      </div>`;
+    }
+    if(t.status==='failed'){
+      return `<div class="actions"><button class="act-txt" data-act="retry">重试</button><button class="icon-btn" data-act="remove" title="移除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>`;
+    }
+    return `<div class="actions"><button class="icon-btn" data-act="remove" title="移除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>`;
+  }
+
+  function previewBlock(t){
+    const chars = RESULT_SAMPLE.replace(/\s/g,'').length;
+    return `<div class="preview">
+      <div class="pv-top"><span class="pv-label">转写结果预览</span><span class="pv-t">${fmtDur(t.dur)} · 约 ${chars} 字 · 已生成 TXT / SRT</span></div>
+      <div class="pv-body">${RESULT_SAMPLE}</div>
+    </div>`;
+  }
+
+  function render(){
+    countEl.textContent = tasks.length;
+    listEl.innerHTML = tasks.map(t=>`
+      <div class="task" data-id="${t.id}">
+        <div class="ftype ${t.kind}">${t.kind==='video'?'MP4':'M4A'}</div>
+        <div class="finfo">
+          <div class="fname" title="${t.name}">${t.name}</div>
+          <div class="fmeta"><span>${t.kind==='video'?'视频':'音频'}</span><span class="sep">·</span><span>${fmtDur(t.dur)}</span><span class="sep">·</span><span>${t.size}</span></div>
+        </div>
+        <div class="rightzone">${statusBlock(t)}${actionsBlock(t)}</div>
+        ${(t.status==='done' && t.expanded)?previewBlock(t):''}
+      </div>`).join('');
+  }
+
+  let toastTimer;
+  function toast(msg){
+    toastEl.textContent = msg; toastEl.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(()=>toastEl.classList.remove('show'),1600);
+  }
+
+  function startTask(t){
+    if(t.status!=='queued' && t.status!=='failed') return;
+    t.status='running'; t.progress=0; t.speed=(7+Math.random()*4).toFixed(1)+'×';
+    const total = 6 + Math.random()*5; let tick=0;
+    t._timer = setInterval(()=>{
+      tick++;
+      t.progress = Math.min(100, Math.round(tick/total*100));
+      const secLeft = Math.round((t.dur*(100-t.progress)/100)/parseFloat(t.speed));
+      t.left = secLeft>60? Math.floor(secLeft/60)+' 分 '+(secLeft%60)+' 秒' : secLeft+' 秒';
+      if(t.progress>=100){
+        clearInterval(t._timer);
+        t.status='done'; t.elapsed=(1+Math.random()*1.5).toFixed(1).replace('.', ' 分 ')+' 秒';
+        render(); toast('转写完成：'+t.name);
+      } else { render(); }
+    }, 260);
+    render();
+  }
+
+  function startAll(){
+    let n=0;
+    tasks.forEach(t=>{ if(t.status==='queued'||t.status==='failed'){ startTask(t); n++; } });
+    if(n===0){ toast('没有待开始的任务'); } else { toast('已开始 '+n+' 个任务'); }
+  }
+
+  // 事件委托
+  listEl.addEventListener('click', e=>{
+    const btn = e.target.closest('[data-act]'); if(!btn) return;
+    const row = e.target.closest('.task'); const t = tasks.find(x=>x.id==row.dataset.id);
+    const act = btn.dataset.act;
+    if(act==='copy'){
+      navigator.clipboard?.writeText(SAMPLE_TEXT).catch(()=>{});
+      btn.classList.add('done'); btn.innerHTML='已复制';
+      toast('已复制全文，去网页 AI 粘贴即可');
+    } else if(act==='preview'){ t.expanded = !t.expanded; render(); }
+    else if(act==='open'){ toast('已在文件夹中定位（示意）'); }
+    else if(act==='remove'){ const i=tasks.indexOf(t); if(i>-1){ if(t._timer) clearInterval(t._timer); tasks.splice(i,1); render(); } }
+    else if(act==='retry'){ startTask(t); }
+  });
+
+  document.getElementById('startAll').addEventListener('click', startAll);
+  document.getElementById('pick').addEventListener('click', e=>{ e.preventDefault(); document.getElementById('fileInput').click(); });
+  document.getElementById('dropzone').addEventListener('click', ()=>document.getElementById('fileInput').click());
+  document.getElementById('dropzone').addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); document.getElementById('fileInput').click(); } });
+  document.getElementById('clearDone').addEventListener('click', ()=>{ for(let i=tasks.length-1;i>=0;i--){ if(tasks[i].status==='done') tasks.splice(i,1); } render(); toast('已清空完成的任务'); });
+
+  const dz = document.getElementById('dropzone');
+  ['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev, e=>{e.preventDefault();dz.classList.add('drag');}));
+  ['dragleave','drop'].forEach(ev=>dz.addEventListener(ev, e=>{e.preventDefault();dz.classList.remove('drag');}));
+  dz.addEventListener('drop', e=>{
+    const files=[...(e.dataTransfer?.files||[])];
+    addFiles(files);
+  });
+  document.getElementById('fileInput').addEventListener('change', e=>{ addFiles([...e.target.files]); e.target.value=''; });
+
+  function addFiles(files){
+    if(!files.length){ // 演示：无真实文件时模拟一个
+      files=[{name:'新会议录音_'+(seed+1)+'.m4a', size: 18*1024*1024, type:'audio/mp4'}];
+    }
+    files.forEach(f=>{
+      const isVideo = (f.type||'').startsWith('video') || /\.(mp4|mov|mkv|webm)$/i.test(f.name);
+      tasks.push({id:++seed, name:f.name, kind:isVideo?'video':'audio', dur:600+Math.floor(Math.random()*2400), size:((f.size||18*1024*1024)/1024/1024).toFixed(1)+' MB', status:'queued'});
+    });
+    render(); toast('已加入队列，点「开始全部」');
+  }
+
+  render();
+</script>
+</body>
+</html>

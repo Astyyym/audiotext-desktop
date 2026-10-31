@@ -1,0 +1,14 @@
+* text=auto
+*.md text eol=lf
+*.py text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sh text eol=lf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+*.exe binary
+*.dll binary
+*.bin binary
+*.gguf binary
+*.onnx binary
