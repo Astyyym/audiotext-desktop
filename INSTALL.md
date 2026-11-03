@@ -4,7 +4,7 @@
 
 ## 一、安装与准备模型
 
-1. 从 [Releases](https://github.com/Astyyym/audiotext-desktop/releases) 下载 `AudioTextDesktop-Setup-<ver>.exe`（**基础安装器**），按向导选择自己的可写安装目录。Release 还提供可选的 `AudioTextDesktop-GPU-cu12-<tag>.zip`（GPU 加速包）及各文件 SHA256 校验；不上传模型包。
+1. 从 [v0.5.0 Release](https://github.com/Astyyym/audiotext-desktop/releases/tag/v0.5.0) 下载 `AudioTextDesktop-Setup-0.5.0.exe`（**基础安装器**），按向导选择自己的可写安装目录。**GPU 加速包**（`AudioTextDesktop-GPU-cu12-gpu-cu12-v1.7z`，约 412MB）在独立 Release：[gpu-cu12-v1](https://github.com/Astyyym/audiotext-desktop/releases/tag/gpu-cu12-v1)；模型走魔搭/模型页。
 2. 内测安装包未签名。Windows 提示未知发布者时，可点「更多信息 → 仍要运行」。
 3. 基础安装包含引擎和 ffmpeg，**默认 CPU，不含 CUDA，也不含任何模型**。打开「设置 → 模型下载（按需）」，任选一种方式准备至少一个模型：
    - **在线**：在 small、medium、large-v3 对应行点击「下载」，默认从魔搭 ModelScope 下载。进度可见，支持取消后重试续传。

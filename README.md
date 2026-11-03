@@ -25,7 +25,7 @@ Windows Electron 桌面主界面：文件先进入待确认区，点击「开始
 
 运行基础安装器，按向导选择自己的安装目录。当前版本未签名，Windows 可能提示未知发布者。准备至少一个模型后即可用 CPU 转写，无需安装 Python 或 CUDA Toolkit。
 
-**体积较大的 GPU 加速包与模型不随 GitHub Release 上传，通过外部链接获取：**
+**GPU 加速包与模型体积较大，不随主安装包一起上传，单独获取：**
 
 - **GPU 加速包（CUDA 12，约 412MB）**：[AudioTextDesktop-GPU-cu12-gpu-cu12-v1.7z](https://github.com/Astyyym/audiotext-desktop/releases/download/gpu-cu12-v1/AudioTextDesktop-GPU-cu12-gpu-cu12-v1.7z)。也可在应用「设置 → 硬件加速」内直接下载或导入。不装 GPU 包也能正常 CPU 转写。
 - **模型**：在应用「设置 → 模型下载（按需）」从 [魔搭 ModelScope](https://modelscope.cn/models/Systran/faster-whisper-large-v3) 按需获取，或导入离线模型包（见下方「准备模型」）。
