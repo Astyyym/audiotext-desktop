@@ -16,6 +16,7 @@ let MODELS = [];
 let GPU = null;
 let CATALOG = [];        // 可下载模型清单（含是否已安装）
 let modelDl = {};        // key -> { status: 'downloading'|'error', pct, message }
+let GPUPACK = null;      // GPU 加速包状态：{ installed, nvidia, available, downloading, pct, downloadMB, sizeMB }
 
 let staged = [];       // 待确认文件（在虚线框内）
 let stagedSeq = 0;
@@ -83,6 +84,7 @@ async function init() {
   wireUi();
   window.api.onEvent(onEngineEvent);
   window.api.onModelEvent(onModelEvent);
+  window.api.onGpuPackEvent(onGpuPackEvent);
   renderStaged();
   render();
   if ((CONFIG.warnings || []).length) setTimeout(() => toast(CONFIG.warnings[0]), 400);
@@ -93,12 +95,59 @@ async function refreshCatalog() {
   try { CATALOG = await window.api.getModelCatalog(); } catch (e) { CATALOG = []; }
 }
 
+/* ---------------- GPU 加速包（可选） ---------------- */
+async function refreshGpuPack() {
+  try { GPUPACK = await window.api.getGpuPack(); } catch (e) { GPUPACK = null; }
+}
+function renderGpuPack() {
+  const desc = document.querySelector('#gpuPackDesc');
+  const actions = document.querySelector('#gpuPackActions');
+  const prog = document.querySelector('#gpuPackProg');
+  const bar = document.querySelector('#gpuPackBar');
+  if (!desc || !actions) return;
+  const g = GPUPACK || {};
+  let text;
+  if (g.installed) text = '已启用' + (g.sizeMB ? '（约 ' + g.sizeMB + ' MB）' : '') + '，可用 GPU 加速';
+  else if (g.downloading) text = '下载中 ' + (g.pct || 0).toFixed(1) + '%' + (g.downloadMB ? ' / 约 ' + g.downloadMB + ' MB' : '');
+  else if (g.nvidia) text = '检测到 NVIDIA 显卡，可下载 GPU 加速包提速' + (g.downloadMB ? '（约 ' + g.downloadMB + ' MB）' : '');
+  else text = '未检测到 NVIDIA 显卡，保持 CPU 即可';
+  desc.textContent = text;
+  if (g.downloading) actions.innerHTML = '<button class="btn btn-ghost btn-sm" id="gpuPackCancel">取消</button>';
+  else if (g.installed) actions.innerHTML = '<span class="mi-status ok">已启用</span>';
+  else actions.innerHTML = '<button class="btn btn-primary btn-sm" id="gpuPackDownload"' + (g.available ? '' : ' disabled') + '>' + (g.available ? '下载' : '尚未发布') + '</button>';
+  if (prog) prog.hidden = !g.downloading;
+  if (bar) bar.style.width = Math.max(1, Math.min(100, g.pct || 0)) + '%';
+}
+function onGpuPackEvent(ev) {
+  if (!ev) return;
+  if (!GPUPACK) GPUPACK = {};
+  if (ev.type === 'start' || ev.type === 'progress') {
+    GPUPACK.downloading = true;
+    if (typeof ev.pct === 'number') GPUPACK.pct = ev.pct;
+    if (ev.total) GPUPACK.downloadMB = Math.round(ev.total / 1048576);
+  } else if (ev.type === 'done') {
+    GPUPACK.downloading = false; GPUPACK.pct = 100;
+    toast('GPU 加速包安装完成');
+    refreshGpuPack().then(() => { renderGpuPack(); refreshSettings().then(() => { if (!$('#view-settings').hidden) renderSettings(); }); });
+    return;
+  } else if (ev.type === 'removed') {
+    toast('已移除 GPU 加速包');
+    refreshGpuPack().then(renderGpuPack);
+    return;
+  } else if (ev.type === 'error') {
+    if (/已取消/.test(ev.message || '')) { GPUPACK.downloading = false; GPUPACK.pct = 0; }
+    else { GPUPACK.downloading = false; toast('GPU 加速包：' + (ev.message || '操作失败')); }
+  }
+  renderGpuPack();
+}
+
 async function refreshSettings() {
   const r = await window.api.getSettings();
   SETTINGS = Object.assign({ aiPrompt: DEFAULT_AI_PROMPT }, r.settings || {});
   MODELS = r.models || [];
   GPU = r.gpu;
   await refreshCatalog();
+  await refreshGpuPack();
   fillHeaderSelects();
   updateHeadAndEnv();
 }
@@ -386,6 +435,7 @@ function renderSettings() {
   const md = $('#modelsDirHint');
   if (md && CONFIG) md.textContent = CONFIG.modelRoot ? '目录：' + CONFIG.modelRoot : '';
   renderModelList();
+  renderGpuPack();
 }
 
 function renderModelList() {
@@ -612,6 +662,20 @@ function wireUi() {
     renderSettings();
     toast(MODELS.length ? '模型列表已刷新' : '还没有完整模型，请先下载或导入');
   });
+  // GPU 加速包
+  $('#gpuPackActions').addEventListener('click', async (e) => {
+    const d = e.target.closest('#gpuPackDownload');
+    const c = e.target.closest('#gpuPackCancel');
+    if (d) { toast('开始下载 GPU 加速包'); await window.api.downloadGpuPack(); }
+    else if (c) { await window.api.cancelGpuPack(); toast('已取消'); }
+  });
+  $('#gpuPackImport').addEventListener('click', async () => {
+    const r = await window.api.importGpuPack();
+    if (r && r.ok) toast('GPU 加速包已导入');
+    else if (r && r.error) toast('导入失败：' + r.error);
+  });
+  $('#gpuPackDir').addEventListener('click', async () => { const p = await window.api.openGpuPackDir(); toast('GPU 包目录：' + p); });
+  $('#gpuPackRemove').addEventListener('click', async () => { await window.api.removeGpuPack(); toast('已移除 GPU 加速包'); });
   $('#openModelsDir').addEventListener('click', async () => {
     const p = await window.api.openModelsDir();
     toast('模型目录：' + p);

@@ -176,14 +176,15 @@ def cmd_transcribe(args) -> int:
 
 def cmd_probe(args) -> int:
     """探测 GPU 是否可用（供前端决定默认设备/模型）。"""
-    from engine.device import setup_cuda_dlls
+    from engine.device import setup_cuda_dlls, has_cublas
     setup_cuda_dlls()
     n = 0
-    try:
-        import ctranslate2
-        n = int(ctranslate2.get_cuda_device_count())
-    except Exception:
-        n = 0
+    if has_cublas():
+        try:
+            import ctranslate2
+            n = int(ctranslate2.get_cuda_device_count())
+        except Exception:
+            n = 0
     _emit({"type": "probe", "cuda": n > 0, "devices": n,
            "device": "cuda" if n > 0 else "cpu"})
     return 0

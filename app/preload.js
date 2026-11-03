@@ -11,6 +11,18 @@ contextBridge.exposeInMainWorld('api', {
   downloadModel: (key) => ipcRenderer.invoke('model:download', key),
   cancelModelDownload: (key) => ipcRenderer.invoke('model:cancel', key),
   openModelsDir: () => ipcRenderer.invoke('models:openDir'),
+
+  getGpuPack: () => ipcRenderer.invoke('gpu:status'),
+  downloadGpuPack: () => ipcRenderer.invoke('gpu:download'),
+  cancelGpuPack: () => ipcRenderer.invoke('gpu:cancel'),
+  importGpuPack: () => ipcRenderer.invoke('gpu:import'),
+  removeGpuPack: () => ipcRenderer.invoke('gpu:remove'),
+  openGpuPackDir: () => ipcRenderer.invoke('gpu:openDir'),
+  onGpuPackEvent: (cb) => {
+    const handler = (_e, data) => cb(data);
+    ipcRenderer.on('gpu:event', handler);
+    return () => ipcRenderer.removeListener('gpu:event', handler);
+  },
   onModelEvent: (cb) => {
     const handler = (_e, data) => cb(data);
     ipcRenderer.on('model:event', handler);

@@ -1,8 +1,10 @@
-# Package the Electron app with engine.exe / ffmpeg / CUDA (no bundled models).
+# Package the CPU base app with engine.exe / ffmpeg (NO bundled CUDA; no bundled models).
+# The optional GPU acceleration pack (CUDA 12) is built separately by scripts/build-gpu-pack.ps1
+# and downloaded/imported on demand; it is NOT included in this installer.
 # Prereq (run once):
 #   & scripts/build-engine.ps1 -Python <venv-python>
 #   & scripts/fetch-ffmpeg.ps1
-#   CUDA DLLs must exist under cuda/; models are downloaded or imported separately.
+#   (optional, before building) & scripts/build-gpu-pack.ps1  -> updates app/gpu-pack.json
 # Usage:
 #   & scripts/build-app.ps1            # unpacked dir  -> release/win-unpacked
 #   & scripts/build-app.ps1 -Target nsis   # installer    -> release/*.exe

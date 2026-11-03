@@ -38,7 +38,7 @@ AudioText Desktop：本地离线音视频转文字桌面应用。目标平台 Wi
 
 ## 5. 交付约束（所有改动都必须满足）
 - **离线**：转写在本地完成、不上传音视频；仅用户主动点击模型下载时联网。
-- **安装**：安装包含引擎、ffmpeg 与 CUDA；small/medium/large-v3 全部独立分发，支持模型页从魔搭下载或离线导入（产品验收见 `docs/PRD.md`）。
+- **安装**：基础安装包含引擎、ffmpeg（默认 CPU，**不内置 CUDA**）；GPU 加速包（CUDA 运行库）为可选组件，按需下载或离线导入；small/medium/large-v3 全部独立分发，支持模型页从魔搭下载或离线导入（产品验收见 `docs/PRD.md`）。
 - **引擎**：`faster-whisper` + `CTranslate2`；`device=auto`（有 GPU 用 GPU，否则 CPU）。
 - **许可**：ffmpeg 商用分发使用 **LGPL** 构建（避免 GPL 传染）。
 - **发布前扫描**：密钥、个人/客户数据、本机绝对路径、日志、数据库、缓存、构建产物。
@@ -50,7 +50,12 @@ AudioText Desktop：本地离线音视频转文字桌面应用。目标平台 Wi
 - 语法通过、进程启动、文件生成、`git push` 都不等于"行为通过 / 已发布"。
 
 ## 7. 项目专属技能
-当前没有稳定的、仅属于本项目的重复流程，故不创建项目技能。若将来出现，放在 `skills/<name>/SKILL.md` 并在此登记路由；不得放入 Hermes 全局技能目录。
+
+本项目的项目级技能放在 `skills/<name>/`，开始相关任务前先读其 `SKILL.md`（及按需的 `references/`）。项目技能只属于本项目，不加入 Hermes 全局技能目录。
+
+| 技能 | 入口 | 适用任务 |
+|---|---|---|
+| `audio-video-transcribe` | `skills/audio-video-transcribe/SKILL.md` | 本地音视频 → 文字/字幕：ffprobe+ffmpeg 预处理、faster-whisper 带时间戳转写（GPU/CPU 自动）、幻觉过滤、段落合并、可选术语校正、导出 txt/srt/md；参考脚本 `skills/audio-video-transcribe/scripts/transcribe.py` |
 
 ## 8. 常用命令
 ```bash
@@ -76,6 +81,7 @@ npm start         # 启动 Electron（本机需先清除 ELECTRON_RUN_AS_NODE）
 & scripts/build-engine.ps1 -Python <装了faster-whisper+pyinstaller的解释器>   # -> build/engine-dist/engine/engine.exe
 & scripts/fetch-ffmpeg.ps1                                                 # -> bin/ffmpeg.exe (LGPL)
 & scripts/build-app.ps1            # 未压缩目录 -> release/win-unpacked
-& scripts/build-app.ps1 -Target nsis   # 安装包 -> release/AudioTextDesktop-Setup-<ver>.exe
+& scripts/build-app.ps1 -Target nsis   # 基础安装包 -> release/AudioTextDesktop-Setup-<ver>.exe
+& scripts/build-gpu-pack.ps1       # 可选 GPU 加速包 -> release/AudioTextDesktop-GPU-cu12-<tag>.zip（并更新 app/gpu-pack.json）
 ```
-前置：engine、ffmpeg、CUDA 资源就位；构建安装包不要求模型。离线模型包仅从本地三种完整模型生成（模型不入库，见 `.gitignore`）。
+前置：engine、ffmpeg 就位；GPU 加速包由 build-gpu-pack.ps1 单独产出、不随基础安装包；构建安装包不要求模型。离线模型包仅从本地三种完整模型生成（模型不入库，见 `.gitignore`）。

@@ -25,6 +25,7 @@ $log = Join-Path $root 'build\engine-build.log'
   --collect-all onnxruntime `
   --collect-all av `
   --collect-all tokenizers `
+  --exclude-module hf_xet `
   --distpath $dist --workpath $work --specpath $spec `
   $entry *> $log
 $code = $LASTEXITCODE

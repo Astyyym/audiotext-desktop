@@ -1,6 +1,6 @@
 {
   "name": "audiotext-desktop",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "AudioText Desktop · 本地离线音视频转文字桌面应用",
   "private": true,
   "author": "AudioText Desktop",
@@ -24,18 +24,21 @@
       "main.js",
       "preload.js",
       "config.js",
+      "gpu-pack.js",
+      "gpu-pack.json",
       "renderer/**/*",
       "package.json"
     ],
     "asar": true,
+    "compression": "maximum",
     "extraResources": [
       { "from": "../build/engine-dist/engine", "to": "engine" },
-      { "from": "../bin", "to": "bin" },
-      { "from": "../cuda", "to": "cuda" }
+      { "from": "../bin", "to": "bin", "filter": ["ffmpeg.exe"] }
     ],
     "win": {
       "target": ["nsis"],
       "signAndEditExecutable": false,
+      "electronLanguages": ["zh-CN", "en-US"],
       "artifactName": "AudioTextDesktop-Setup-${version}.${ext}"
     },
     "nsis": {

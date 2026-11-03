@@ -222,6 +222,24 @@
             </div>
 
             <div class="card">
+              <div class="card-title">硬件加速（GPU 加速包）</div>
+              <div class="hint" style="margin-bottom:10px;">默认安装为 CPU 版，不含 CUDA 运行库。检测到 NVIDIA 显卡可下载 GPU 加速包解锁提速；也支持离线 zip 导入。下载/导入仅在你主动点击时联网。</div>
+              <div class="model-item" id="gpuPackItem">
+                <div class="mi-info">
+                  <div class="mi-name">CUDA 12 运行库 <span class="mi-tag">可选</span></div>
+                  <div class="mi-desc" id="gpuPackDesc">检测中…</div>
+                </div>
+                <div class="mi-right" id="gpuPackActions"></div>
+                <div class="mi-prog" id="gpuPackProg" hidden><div class="bar"><i id="gpuPackBar" style="width:0%"></i></div><span class="mi-err" id="gpuPackErr" hidden></span></div>
+              </div>
+              <div class="inline-actions" style="margin-top:10px;flex-wrap:wrap;">
+                <button class="btn btn-ghost btn-sm" id="gpuPackImport">导入离线包</button>
+                <button class="btn btn-ghost btn-sm" id="gpuPackDir">打开目录</button>
+                <button class="btn btn-ghost btn-sm" id="gpuPackRemove">移除</button>
+              </div>
+            </div>
+
+            <div class="card">
               <div class="card-title">模型下载（按需）</div>
               <div class="hint" style="margin-bottom:10px;">模型较大，默认不随安装包提供。点「下载」会从魔搭（ModelScope）下载到本机 models 目录，支持断点续传；也可用离线模型包把 <b>small / medium / large-v3</b> 文件夹直接放到该目录（放好后点「刷新模型列表」即可识别）。</div>
               <div class="model-list" id="modelList"></div>

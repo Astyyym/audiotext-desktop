@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
-"""音视频处理：ffprobe 取时长、ffmpeg 抽 16k 单声道 wav。"""
+"""音视频处理：ffmpeg 读取时长、抽 16k 单声道 wav（不再依赖 ffprobe，减小安装体积）。"""
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -18,15 +19,15 @@ def _bin(name: str) -> str:
 
 
 def probe_duration(path: str) -> float:
-    exe = _bin("ffprobe")
-    r = subprocess.run(
-        [exe, "-v", "error", "-show_entries", "format=duration",
-         "-of", "default=nw=1:nk=1", path],
-        capture_output=True, text=True)
-    try:
-        return float(r.stdout.strip())
-    except Exception:
+    """用 `ffmpeg -i` 的 stderr 解析时长；不依赖 ffprobe（两者功能重复，已移除以减小体积）。"""
+    exe = _bin("ffmpeg")
+    r = subprocess.run([exe, "-i", path], capture_output=True, text=True, errors="ignore")
+    text = (r.stderr or "") + (r.stdout or "")
+    m = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", text)
+    if not m:
         return 0.0
+    hours, minutes, seconds = int(m.group(1)), int(m.group(2)), float(m.group(3))
+    return hours * 3600 + minutes * 60 + seconds
 
 
 def to_wav16k(src: str, dst: str = None) -> str:

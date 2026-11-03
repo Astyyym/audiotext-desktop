@@ -1,4 +1,6 @@
-# Download LGPL ffmpeg/ffprobe into bin/ (avoid GPL copyleft; safe for future public release)
+# Download LGPL ffmpeg into bin/ (avoid GPL copyleft; safe for future public release).
+# Only ffmpeg.exe is kept: ffprobe is no longer shipped (duration is read via `ffmpeg -i`),
+# which saves ~130MB of uncompressed bundle size.
 # Usage: & scripts/fetch-ffmpeg.ps1
 param(
   [string]$Url = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip',
@@ -17,10 +19,11 @@ Invoke-WebRequest -Uri $Url -OutFile $tmpZip -UseBasicParsing
 Expand-Archive -Path $tmpZip -DestinationPath $tmpDir -Force
 
 $ff = Get-ChildItem $tmpDir -Recurse -File -Filter 'ffmpeg.exe' | Select-Object -First 1
-$fp = Get-ChildItem $tmpDir -Recurse -File -Filter 'ffprobe.exe' | Select-Object -First 1
-if (-not $ff -or -not $fp) { throw 'ffmpeg.exe / ffprobe.exe not found in archive' }
+if (-not $ff) { throw 'ffmpeg.exe not found in archive' }
 Copy-Item $ff.FullName (Join-Path $BinDir 'ffmpeg.exe') -Force
-Copy-Item $fp.FullName (Join-Path $BinDir 'ffprobe.exe') -Force
+# Drop a stale ffprobe if a previous build placed one here (no longer used).
+$staleProbe = Join-Path $BinDir 'ffprobe.exe'
+if (Test-Path $staleProbe) { Remove-Item $staleProbe -Force; Write-Output 'Removed stale bin/ffprobe.exe (no longer used).' }
 
 Remove-Item $tmpZip,$tmpDir -Recurse -Force -ErrorAction SilentlyContinue
 

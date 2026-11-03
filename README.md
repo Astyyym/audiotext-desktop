@@ -2,13 +2,13 @@
 
 把音视频在本机转成可复制的文字稿。支持 Windows 10/11 x64、NVIDIA GPU / CPU、批量队列、术语校正，以及 TXT / SRT 导出。
 
-[下载 v0.4.0](https://github.com/Astyyym/audiotext-desktop/releases/tag/v0.4.0) · [安装说明](INSTALL.md) · [更新记录](CHANGELOG.md)
+[下载 v0.5.0](https://github.com/Astyyym/audiotext-desktop/releases/tag/v0.5.0) · [安装说明](INSTALL.md) · [更新记录](CHANGELOG.md)
 
 ## 界面预览
 
 ![AudioText Desktop Windows 主界面](docs/images/main-window.png)
 
-Windows Electron 桌面主界面：文件先进入待确认区，点击「开始全部」后转写，完成后可展开预览、复制全文和打开输出目录。截图由当前 v0.4 源码运行的桌面程序生成，使用独立配置与生成的演示录音。
+Windows Electron 桌面主界面：文件先进入待确认区，点击「开始全部」后转写，完成后可展开预览、复制全文和打开输出目录。截图由当前源码运行的桌面程序生成，使用独立配置与生成的演示录音。
 
 ![模型按需下载](docs/images/model-downloads.png)
 
@@ -16,16 +16,19 @@ Windows Electron 桌面主界面：文件先进入待确认区，点击「开始
 
 ## 下载与安装
 
-前往 [v0.4.0 Release](https://github.com/Astyyym/audiotext-desktop/releases/tag/v0.4.0) 下载：
+从 [v0.5.0 Release](https://github.com/Astyyym/audiotext-desktop/releases/tag/v0.5.0) 下载本体安装器：
 
 | 文件 | 用途 |
 |---|---|
-| [AudioTextDesktop-Setup-0.4.0.exe](https://github.com/Astyyym/audiotext-desktop/releases/download/v0.4.0/AudioTextDesktop-Setup-0.4.0.exe) | Windows x64 安装器，包含引擎、ffmpeg 和 CUDA 运行库，**不包含模型** |
-| [安装器 SHA256](https://github.com/Astyyym/audiotext-desktop/releases/download/v0.4.0/AudioTextDesktop-Setup-0.4.0.exe.sha256) | 校验下载文件 |
+| [AudioTextDesktop-Setup-0.5.0.exe](https://github.com/Astyyym/audiotext-desktop/releases/download/v0.5.0/AudioTextDesktop-Setup-0.5.0.exe) | Windows x64 **基础安装器**：引擎 + ffmpeg，**默认 CPU，不含 CUDA、不含模型** |
+| [SHA256](https://github.com/Astyyym/audiotext-desktop/releases/download/v0.5.0/AudioTextDesktop-Setup-0.5.0.exe.sha256) | 校验下载文件 |
 
-运行安装器，按向导选择自己的安装目录。当前版本未签名，Windows 可能提示未知发布者。准备至少一个模型后即可转写，无需安装 Python 或 CUDA Toolkit；GPU 加速需 NVIDIA 驱动。
+运行基础安装器，按向导选择自己的安装目录。当前版本未签名，Windows 可能提示未知发布者。准备至少一个模型后即可用 CPU 转写，无需安装 Python 或 CUDA Toolkit。
 
-**GitHub Release 只分发 Desktop 安装器及其校验文件，不上传模型包。**
+**体积较大的 GPU 加速包与模型不随 GitHub Release 上传，通过外部链接获取：**
+
+- **GPU 加速包（CUDA 12，约 412MB）**：[AudioTextDesktop-GPU-cu12-gpu-cu12-v1.7z](https://github.com/Astyyym/audiotext-desktop/releases/download/gpu-cu12-v1/AudioTextDesktop-GPU-cu12-gpu-cu12-v1.7z)。也可在应用「设置 → 硬件加速」内直接下载或导入。不装 GPU 包也能正常 CPU 转写。
+- **模型**：在应用「设置 → 模型下载（按需）」从 [魔搭 ModelScope](https://modelscope.cn/models/Systran/faster-whisper-large-v3) 按需获取，或导入离线模型包（见下方「准备模型」）。
 
 ## 准备模型
 

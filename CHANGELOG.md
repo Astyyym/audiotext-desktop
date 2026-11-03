@@ -1,5 +1,12 @@
 # 更新记录
 
+## v0.5.0 · 2026-11-03
+
+- **体积拆分**：安装包改为「CPU 基础包（引擎 + ffmpeg，不含 CUDA）」，显著减小；GPU 加速所需的 CUDA 12 运行库改为可选「GPU 加速包」，在「设置 → 硬件加速」按需下载或离线导入（安装到 `userData/gpu/cuda`）。
+- 新增 GPU 加速包管理：下载（断点续传/取消）、离线包（.7z）导入、移除、打开目录；SHA256 与解压后结构校验，失败不落盘。
+- 设备判定更稳健：无 cublas 时 `device=auto` 归一到 CPU，修复有 N 卡但未装 GPU 包时的误判报错。
+- 基础包裁剪：Electron 仅保留中/英语言包（`electronLanguages`）；启用 `compression: maximum`。
+
 ## v0.4.0 · 2026-10-31
 
 - 安装器不再内置 Small、Medium 或 Large-v3；保留转写引擎、ffmpeg 与 CUDA 运行库。

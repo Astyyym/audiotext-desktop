@@ -29,6 +29,13 @@ function deriveModelName(modelPath) {
   }
 }
 
+function userDataDir() {
+  try {
+    if (electronApp && typeof electronApp.getPath === 'function') return electronApp.getPath('userData');
+  } catch (e) { /* ignore */ }
+  return '';
+}
+
 function readLocal(appDir) {
   const candidates = [path.join(appDir, 'config.local.json')];
   try {
@@ -67,10 +74,10 @@ function loadConfig() {
         prompt: '以下是普通话对话。',
         beam: 5,
         outDir: '',
-        cudaDir: path.join(resRoot, 'cuda'),
+        cudaDir: '',
         extraPath: '',
         ffmpeg: path.join(resRoot, 'bin', 'ffmpeg.exe'),
-        ffprobe: path.join(resRoot, 'bin', 'ffprobe.exe'),
+        ffprobe: '',
       }
     : {
         engineRoot: projectRoot,
@@ -86,8 +93,8 @@ function loadConfig() {
         outDir: '',
         cudaDir: '',
         extraPath: '',
-        ffmpeg: '',
-        ffprobe: 'ffprobe',
+        ffmpeg: 'ffmpeg',
+        ffprobe: '',
       };
 
   const local = readLocal(appDir);
@@ -112,8 +119,18 @@ function loadConfig() {
     cudaDir: pick('cudaDir', 'ATD_CUDA_DIR') || '',
     extraPath: pick('extraPath', 'ATD_EXTRA_PATH') || '',
     ffmpeg: pick('ffmpeg', 'FFMPEG') || '',
-    ffprobe: pick('ffprobe', 'FFPROBE') || 'ffprobe',
+    ffprobe: pick('ffprobe', 'FFPROBE') || '',
   };
+
+  // CUDA 运行库解析顺序（B 档：默认不含 cuda，GPU 包按需装到 userData/gpu/cuda）：
+  //   1) 环境变量 / config.local.json 显式指定（开发态常见：torch/lib）
+  //   2) userData/gpu/cuda（按需下载/导入的 GPU 加速包）
+  //   3) resourcesPath/cuda（兼容 v0.4 及更早的内置全量版）
+  const gds = userDataDir();
+  const gpuPackDir = gds ? path.join(gds, 'gpu', 'cuda') : '';
+  const cudaCandidates = [cfg.cudaDir, gpuPackDir, packaged ? path.join(resRoot, 'cuda') : ''].filter(Boolean);
+  cfg.gpuPackDir = gpuPackDir;
+  cfg.cudaDir = cudaCandidates.find((p) => fs.existsSync(p)) || (cfg.cudaDir || '');
 
   cfg.useEngineExe = !!(cfg.engineExe && fs.existsSync(cfg.engineExe));
   cfg.modelName = local.modelName || deriveModelName(cfg.model);

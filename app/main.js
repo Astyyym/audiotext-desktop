@@ -57,6 +57,171 @@ const MODELSCOPE_BASE = 'https://modelscope.cn/models';
 function modelTotalBytes(def) { return def.files.reduce((a, f) => a + f.size, 0); }
 const modelDownloads = new Map(); // key -> { cancelled, abortController }
 
+/* ---------------- GPU 加速包（可选组件，CUDA 12 运行库） ---------------- */
+// 纯 Node 安装工具，懒加载避免影响模型相关路径与测试。
+let _gpuPack = null;
+function gp() { if (!_gpuPack) _gpuPack = require('./gpu-pack'); return _gpuPack; }
+const GPU_PACK_DEFAULT = {
+  key: 'cuda12',
+  name: 'GPU 加速包（CUDA 12）',
+  version: '1',
+  url: '',
+  size: 0,
+  sha256: '',
+  files: ['cublas64_12.dll', 'cublasLt64_12.dll'],
+};
+function loadGpuPack() {
+  try {
+    const p = path.join(__dirname, 'gpu-pack.json');
+    const raw = fs.readFileSync(p, 'utf-8').replace(/^\uFEFF/, '');
+    return Object.assign({}, GPU_PACK_DEFAULT, JSON.parse(raw));
+  } catch (e) { return Object.assign({}, GPU_PACK_DEFAULT); }
+}
+let nvidiaCache = null;
+const gpuPackDownloads = new Map(); // key -> { cancelled, abortController, pct }
+
+function gpuPackUserDir(cfg) {
+  return cfg.gpuPackDir || path.join(app.getPath('userData'), 'gpu', 'cuda');
+}
+function gpuPackZipPath() { return path.join(app.getPath('userData'), 'gpu', 'gpu-pack.zip'); }
+
+function detectNvidia() {
+  if (nvidiaCache !== null) return Promise.resolve(nvidiaCache);
+  return new Promise((resolve) => {
+    if (typeof execFile !== 'function') { nvidiaCache = false; return resolve(false); }
+    execFile('nvidia-smi', ['-L'], { windowsHide: true, timeout: 8000 }, (err, stdout) => {
+      nvidiaCache = !err && /GPU\s+\d+:/i.test(String(stdout || ''));
+      resolve(nvidiaCache);
+    });
+  });
+}
+
+function sendGpuEvent(payload) {
+  if (win && !win.isDestroyed()) win.webContents.send('gpu:event', payload);
+}
+
+function gpuPackStatus(cfg) {
+  const pack = loadGpuPack();
+  const userDir = gpuPackUserDir(cfg);
+  const installedUser = gp().isInstalled(userDir, pack.files);
+  const installedRes = !!(cfg.cudaDir && fs.existsSync(cfg.cudaDir) && gp().isInstalled(cfg.cudaDir, pack.files));
+  const installed = installedUser || installedRes;
+  const activeDir = installedUser ? userDir : (installedRes ? cfg.cudaDir : '');
+  const dl = gpuPackDownloads.get(pack.key);
+  return {
+    key: pack.key, name: pack.name, version: pack.version,
+    installed, location: installedUser ? 'user' : (installedRes ? 'resources' : null),
+    sizeMB: installed ? Math.round(gp().dirSizeBytes(activeDir) / 1048576) : 0,
+    downloadMB: pack.size ? Math.round(pack.size / 1048576) : 0,
+    available: !!(pack.url && pack.size),
+    downloading: !!dl, pct: dl ? (dl.pct || 0) : 0,
+    nvidia: nvidiaCache === true,
+  };
+}
+
+// 通用断点续传：把 url 下载到 dest（.part 语义），校验最终大小。GPU 包与模型共用类似策略但不做模型字段校验。
+async function streamDownloadToFile(ctrl, url, dest, expected, onBytes) {
+  let start = 0;
+  try { const st = fs.statSync(dest); if (st.isFile()) start = st.size; } catch (e) { /* none */ }
+  if (start > expected) { try { fs.rmSync(dest, { force: true }); } catch (e) { /* ignore */ } start = 0; }
+  if (start === expected) { if (onBytes) onBytes(expected); return; }
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  const controller = new AbortController();
+  ctrl.abortController = controller;
+  const headers = start ? { Range: 'bytes=' + start + '-' } : {};
+  const res = await net.fetch(url, { method: 'GET', headers, signal: controller.signal });
+  if (res.status === 416 && start >= expected) { if (onBytes) onBytes(expected); return; }
+  if (res.status !== 200 && res.status !== 206) throw new Error('HTTP ' + res.status);
+  let append = false;
+  if (res.status === 206) { append = start > 0; } else { start = 0; append = false; }
+  let got = append ? start : 0;
+  if (onBytes) onBytes(got);
+  if (!res.body) throw new Error('服务器返回空响应');
+  const meter = new Transform({
+    transform(chunk, _enc, cb) {
+      if (got + chunk.length > expected) return cb(new Error('下载内容超过预期文件大小'));
+      got += chunk.length; if (onBytes) onBytes(got); cb(null, chunk);
+    },
+  });
+  await pipeline(Readable.fromWeb(res.body), meter, fs.createWriteStream(dest, { flags: append ? 'a' : 'w' }), { signal: controller.signal });
+  if (ctrl.cancelled) throw new Error('已取消');
+  const size = fs.statSync(dest).size;
+  if (size !== expected) throw new Error('文件大小不符（' + size + '/' + expected + '），已保留断点可重试');
+  ctrl.abortController = null;
+}
+
+async function downloadGpuPack(cfg) {
+  const pack = loadGpuPack();
+  if (gpuPackDownloads.has(pack.key)) return;
+  if (!pack.url || !pack.size) { sendGpuEvent({ type: 'error', message: 'GPU 加速包尚未发布（缺少下载地址或大小）' }); return; }
+  const ctrl = { cancelled: false, abortController: null, pct: 0 };
+  gpuPackDownloads.set(pack.key, ctrl);
+  const dest = gpuPackZipPath();
+  const part = dest + '.part';
+  let lastPct = -1;
+  const report = (got) => {
+    const pct = pack.size ? Math.min(100, Math.round((got / pack.size) * 1000) / 10) : 0;
+    ctrl.pct = pct;
+    if (pct !== lastPct) { lastPct = pct; sendGpuEvent({ type: 'progress', received: got, total: pack.size, pct }); }
+  };
+  try {
+    sendGpuEvent({ type: 'start', received: 0, total: pack.size, pct: 0 });
+    await streamDownloadToFile(ctrl, pack.url, part, pack.size, report);
+    if (ctrl.cancelled) throw new Error('已取消');
+    sendGpuEvent({ type: 'status', stage: 'verify' });
+    await gp().verifyZip(part, { size: pack.size, sha256: pack.sha256 });
+    try { fs.rmSync(dest, { force: true }); } catch (e) { /* ignore */ }
+    try { fs.renameSync(part, dest); } catch (e) { fs.copyFileSync(part, dest); fs.rmSync(part, { force: true }); }
+    sendGpuEvent({ type: 'status', stage: 'extract' });
+    const result = await gp().installFromZip(dest, gpuPackUserDir(cfg), { size: pack.size, sha256: pack.sha256 }, { files: pack.files });
+    gpuCache = null; nvidiaCache = null;
+    sendGpuEvent({ type: 'done', dir: result.dir, sizeMB: Math.round((result.sizeBytes || 0) / 1048576) });
+  } catch (e) {
+    if (ctrl.cancelled) sendGpuEvent({ type: 'error', message: '已取消，已保留断点可重试' });
+    else sendGpuEvent({ type: 'error', message: (e && e.message) || String(e) });
+  } finally {
+    gpuPackDownloads.delete(pack.key);
+  }
+}
+
+function cancelGpuPack() {
+  const pack = loadGpuPack();
+  const ctrl = gpuPackDownloads.get(pack.key);
+  if (ctrl) {
+    ctrl.cancelled = true;
+    if (ctrl.abortController) { try { ctrl.abortController.abort(); } catch (e) { /* ignore */ } }
+  }
+}
+
+async function importGpuPack(cfg) {
+  const pack = loadGpuPack();
+  const res = await dialog.showOpenDialog(win, {
+    title: '选择 GPU 加速包（zip）', properties: ['openFile'], filters: [{ name: 'GPU 加速包', extensions: ['zip'] }],
+  });
+  if (res.canceled || !res.filePaths.length) return { ok: false, cancelled: true };
+  const zip = res.filePaths[0];
+  try {
+    sendGpuEvent({ type: 'start', total: pack.size || 0, pct: 0 });
+    const expected = pack.size ? { size: pack.size, sha256: pack.sha256 } : {};
+    const result = await gp().installFromZip(zip, gpuPackUserDir(cfg), expected, { files: pack.files });
+    gpuCache = null; nvidiaCache = null;
+    sendGpuEvent({ type: 'done', dir: result.dir, sizeMB: Math.round((result.sizeBytes || 0) / 1048576) });
+    return { ok: true, dir: result.dir };
+  } catch (e) {
+    sendGpuEvent({ type: 'error', message: (e && e.message) || String(e) });
+    return { ok: false, error: (e && e.message) || String(e) };
+  }
+}
+
+function removeGpuPack(cfg) {
+  try { fs.rmSync(gpuPackUserDir(cfg), { recursive: true, force: true }); } catch (e) { /* ignore */ }
+  try { fs.rmSync(gpuPackZipPath(), { force: true }); } catch (e) { /* ignore */ }
+  try { fs.rmSync(gpuPackZipPath() + '.part', { force: true }); } catch (e) { /* ignore */ }
+  gpuCache = null;
+  sendGpuEvent({ type: 'removed' });
+  return { ok: true };
+}
+
 const DEFAULT_SETTINGS = {
   device: 'auto',      // auto | gpu | cpu
   modelKey: 'auto',    // auto | small | medium | large-v3
@@ -375,13 +540,15 @@ async function probeGpu(cfg) {
   return gpuCache;
 }
 
-function probeDuration(ffprobe, filePath) {
+function probeDuration(ffmpeg, filePath) {
   return new Promise((resolve) => {
-    execFile(ffprobe, ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', filePath],
-      { windowsHide: true, timeout: 15000 },
-      (err, stdout) => {
-        if (err) return resolve(0);
-        const v = parseFloat(String(stdout).trim());
+    // 用 ffmpeg -i 的 stderr 解析时长，不再依赖 ffprobe（减小安装体积）。
+    execFile(ffmpeg, ['-i', filePath], { windowsHide: true, timeout: 15000 },
+      (err, stdout, stderr) => {
+        const text = String(stderr || '') + String(stdout || '');
+        const m = /Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(text);
+        if (!m) return resolve(0);
+        const v = Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
         resolve(Number.isFinite(v) ? v : 0);
       });
   });
@@ -418,6 +585,7 @@ function registerIpc() {
       packaged: cfg.packaged,
       useEngineExe: cfg.useEngineExe,
       modelRoot: modelRoot(cfg),
+      gpuPackDir: cfg.gpuPackDir || '',
       warnings: cfg.warnings,
     };
   });
@@ -468,6 +636,28 @@ function registerIpc() {
     return root;
   });
 
+  ipcMain.handle('gpu:status', async () => {
+    const cfg = loadConfig();
+    await detectNvidia();
+    return gpuPackStatus(cfg);
+  });
+  ipcMain.handle('gpu:download', () => {
+    const cfg = loadConfig();
+    const pack = loadGpuPack();
+    if (!gpuPackDownloads.has(pack.key)) downloadGpuPack(cfg);
+    return { ok: true };
+  });
+  ipcMain.handle('gpu:cancel', () => { cancelGpuPack(); return { ok: true }; });
+  ipcMain.handle('gpu:import', () => importGpuPack(loadConfig()));
+  ipcMain.handle('gpu:remove', () => removeGpuPack(loadConfig()));
+  ipcMain.handle('gpu:openDir', async () => {
+    const cfg = loadConfig();
+    const dir = gpuPackUserDir(cfg);
+    try { fs.mkdirSync(dir, { recursive: true }); } catch (e) { /* ignore */ }
+    try { shell.openPath(dir); } catch (e) { /* ignore */ }
+    return dir;
+  });
+
   ipcMain.handle('terms:get', () => getTerms());
   ipcMain.handle('terms:save', (_e, t) => { saveTerms(t); return getTerms(); });
 
@@ -501,7 +691,7 @@ function registerIpc() {
     const cfg = loadConfig();
     let size = 0;
     try { size = fs.statSync(filePath).size; } catch (e) { size = 0; }
-    const duration = await probeDuration(cfg.ffprobe, filePath);
+    const duration = await probeDuration(cfg.ffmpeg, filePath);
     return { size, duration };
   });
 
@@ -521,7 +711,12 @@ function registerIpc() {
     const modelSel = resolveModel(cfg, settings.modelKey, gpu);
     if (!modelSel.dir) return { ok: false, error: '还没有可用模型，请到「设置 → 模型」下载，或导入离线模型包。' };
 
-    const device = settings.device === 'gpu' ? 'cuda' : (settings.device === 'cpu' ? 'cpu' : 'auto');
+    let device = settings.device === 'gpu' ? 'cuda' : (settings.device === 'cpu' ? 'cpu' : 'auto');
+    // 基础包默认无 CUDA：GPU 不可用时把 auto 归一到 cpu，显式选 GPU 则明确提示，避免引擎侧误判设备报错。
+    if (!gpu) {
+      if (device === 'cuda') return { ok: false, error: 'GPU 加速包未安装或显卡不可用，请到「设置 → 硬件加速」下载/导入，或改用 CPU。' };
+      device = 'cpu';
+    }
     let outDir = (payload && payload.outDir) || settings.outDir || cfg.outDir;
     if (!outDir) outDir = path.join(path.dirname(filePath), '文字稿');
     try { fs.mkdirSync(outDir, { recursive: true }); } catch (e) { return { ok: false, error: '无法创建输出目录：' + e.message }; }

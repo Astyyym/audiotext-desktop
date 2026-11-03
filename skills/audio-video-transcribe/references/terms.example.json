@@ -1,0 +1,13 @@
+{
+  "_note": "术语校正示例。auto=直接替换；context=上下文命中 near 才替换；review=只报告不改。",
+  "rules": [
+    {"from": "张叁", "to": "张三", "level": "auto"},
+    {"from": "千倍", "to": "QianBase", "level": "auto"},
+    {"from": "高斯DB", "to": "GaussDB", "level": "auto"},
+    {"from": "have", "to": "Hive", "level": "auto"},
+    {"from": "刺激", "to": "次级", "level": "context", "near": "关注|可疑|损失|正常"}
+  ],
+  "review_only": [
+    {"from": "某种可疑词", "note": "需听原音确认，不自动改"}
+  ]
+}

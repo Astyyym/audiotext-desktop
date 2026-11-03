@@ -18,7 +18,7 @@
 │  cli.py        对外命令/事件
 └─────────────┬──────────────┘
               │
-   ffmpeg 静态二进制 / CUDA 运行库（随安装包内置）；模型（独立下载或导入）
+   ffmpeg 静态二进制（随包内置）；CUDA 运行库（可选 GPU 加速包，按需下载/导入）；模型（独立下载或导入）
 ```
 
 ## 2. 选型
@@ -26,7 +26,7 @@
 |---|---|---|
 | 前端壳 | Electron | 生态成熟、热门、上手快；体积较大但可接受 |
 | 引擎 | faster-whisper + CTranslate2 | 一套代码支持 GPU/CPU |
-| 音视频 | ffmpeg / ffprobe 静态二进制 | 解码、转 16k 单声道 wav |
+| 音视频 | ffmpeg 静态二进制（LGPL） | 解码、转 16k 单声道 wav；时长用 `ffmpeg -i` 解析（不再随包 ffprobe，减小体积） |
 | VAD | faster-whisper 内置 Silero VAD | 切片、去静音 |
 | 通信 | stdio JSON 行（简单）/ HTTP+SSE（易扩展） | 进度事件实时回传 |
 | 打包 | Inno Setup / NSIS | 一个安装包 + 可选组件 |
@@ -50,7 +50,7 @@
 | C | OpenVINO 版 whisper | Intel 核显 | 二期 |
 
 ## 5. 处理流水线
-1. `ffprobe` 取时长；
+1. 用 `ffmpeg -i` 解析音视频时长；
 2. `ffmpeg -y -v error -i <in> -vn -ac 1 -ar 16000 -c:a pcm_s16le <tmp.wav>`；
 3. faster-whisper 转写（生成器，逐段产出）；
 4. 段落合并：相邻段间隔 ≤5s 且合并后 ≤240 字合为一段；
@@ -75,11 +75,12 @@
 - 「复制全文」= 复制 `.txt` 内容；「复制带时间戳」= 取 `.md`/`.srt`。
 
 ## 7. 打包方案（概要）
-- 安装包（NSIS）内置：程序、引擎、ffmpeg、CUDA 运行库；不内置任何模型。
+- 基础安装包（NSIS）内置：程序、引擎、ffmpeg；**不内置 CUDA 运行库**，默认走 CPU。基础包因此显著小于旧版（GPU 由可选组件提供）。
+- **可选 GPU 加速包**（CUDA 12 运行库：`cublas64_12.dll` + `cublasLt64_12.dll`，见 findings F18）作为独立 7z（LZMA 压缩，比 zip 小约 20%）分发。设置页「硬件加速」可在线下载或离线导入；安装到 `userData/gpu/cuda/`，运行时 `cudaDir` 解析顺序：环境/配置 > `userData/gpu/cuda` > `resourcesPath/cuda`（兼容旧版全量安装）。
+- GPU 可用性判定必须同时满足"cuda 目录存在且含 cublas"与"设备可用"；无 cublas 时 `device=auto` 归一到 CPU（避免 findings F16 的 `get_cuda_device_count` 误判）。前端在 GPU 不可用时禁用 GPU 选择并提示下载加速包。
 - 模型页默认从魔搭 ModelScope 下载 small / medium / large-v3 的 CTranslate2 文件到 `resources/models/<key>/`，支持取消、断点续传；仅用户主动点击时联网。
 - 离线包顶层包含 `small/`、`medium/`、`large-v3/`，解压至 `resources/models/`，刷新模型列表或重启即可识别。
-- CUDA DLL 放入安装目录，sidecar 启动时 `os.add_dll_directory` + PATH；用户只需 NVIDIA 驱动。
-- 不使用单文件 onefile（每次启动解压大体积资源较慢）。Windows 安装器由 `scripts/build-app.ps1` 生成，第三方资源按各自许可分发。
+- 不使用单文件 onefile（每次启动解压大体积资源较慢）。GPU 包同样不使用 onefile，解压到固定目录后校验两个 DLL 再原子替换（.7z 用系统内置 `tar.exe` 解压，无需额外解压工具）。Windows 安装器由 `scripts/build-app.ps1` 生成，GPU 包由 `scripts/build-gpu-pack.ps1` 生成并写入 `app/gpu-pack.json`；第三方资源按各自许可分发。
 
 ## 8. 安全与隐私
 - 全本地、不埋点、不上传；临时音频任务结束即删；输出写用户指定目录。

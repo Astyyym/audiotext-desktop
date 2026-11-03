@@ -1,0 +1,12 @@
+{
+    "key":  "cuda12",
+    "name":  "GPU acceleration pack (CUDA 12)",
+    "version":  "1",
+    "url":  "https://github.com/Astyyym/audiotext-desktop/releases/download/gpu-cu12-v1/AudioTextDesktop-GPU-cu12-gpu-cu12-v1.7z",
+    "size":  432203839,
+    "sha256":  "4786e6a19ee51bdeda907815b909a5f0436d30c76c244bd91939e597178b061f",
+    "files":  [
+                  "cublas64_12.dll",
+                  "cublasLt64_12.dll"
+              ]
+}
